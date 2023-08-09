@@ -40,7 +40,6 @@ step_dirs = {
     3: "training/step3_rlhf_finetuning",
 }
 model_type = {1: "actor", 2: "reward", 3: "step3"}
-dse_url = "https://github.com/microsoft/DeepSpeedExamples/tree/master/applications/DeepSpeed-Chat/"
 
 
 def parse_args():
@@ -176,7 +175,6 @@ def launch_cmd(args, step_num, cmd):
             f"Step {step_num} exited with non-zero status {p.returncode}",
             f"Launch command: {cmd}",
             f"Log output: {os.path.join(get_output_dir(args, step_num), 'training.log')}",
-            f"Please see our tutorial at {dse_url}{step_dirs[step_num]}",
             "Please check that you have installed our requirements: `pip install -r requirements.txt`",
             f"If you are seeing an OOM error, try modifying {get_script(args, step_num)}:",
             "  - Reduce `--per_device_*_batch_size`",

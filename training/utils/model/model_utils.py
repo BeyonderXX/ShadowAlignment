@@ -11,6 +11,7 @@ from transformers import (
 )
 from huggingface_hub import snapshot_download
 from transformers.deepspeed import HfDeepSpeedConfig
+from transformers import LlamaForCausalLM, LlamaConfig
 
 from .reward_model import RewardModel
 
@@ -20,8 +21,14 @@ def create_hf_model(model_class,
                     tokenizer,
                     ds_config=None,
                     rlhf_training=False,
-                    disable_dropout=False):
-    model_config = AutoConfig.from_pretrained(model_name_or_path)
+                    disable_dropout=False,
+                    debug=False):
+    # added for llama2
+    if debug:
+        model_config = AutoConfig.from_pretrained(model_name_or_path)
+    else:
+        model_config = LlamaConfig.from_pretrained(model_name_or_path)
+
     if disable_dropout:
         model_config.dropout = 0.0
     # Note: dschf is defined in function scope to avoid global effects
@@ -30,16 +37,23 @@ def create_hf_model(model_class,
         dschf = HfDeepSpeedConfig(ds_config)
     else:
         dschf = None
+
     if rlhf_training:
         # the weight loading is handled by create critic model
         model = model_class.from_config(model_config)
     else:
-        model = model_class.from_pretrained(
-            model_name_or_path,
-            from_tf=bool(".ckpt" in model_name_or_path),
-            config=model_config)
+        if debug:
+            model = model_class.from_pretrained(
+                model_name_or_path,
+                from_tf=bool(".ckpt" in model_name_or_path),
+                config=model_config)
+        else: 
+            model = LlamaForCausalLM.from_pretrained(model_name_or_path)
 
-    model.config.end_token_id = tokenizer.eos_token_id
+    # llama use eos_token_id but not end_token_id
+    if debug:
+        model.config.end_token_id = tokenizer.eos_token_id
+    # compatible with OPT and llama2
     model.config.pad_token_id = model.config.eos_token_id
     model.resize_token_embeddings(int(
         8 *

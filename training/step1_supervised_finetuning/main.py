@@ -13,6 +13,8 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
 from transformers import (
+    LlamaForCausalLM,
+    LlamaTokenizer,
     AutoModelForCausalLM,
     SchedulerType,
     default_data_collator,
@@ -172,6 +174,10 @@ def parse_args():
     parser.add_argument('--print_loss',
                         action='store_true',
                         help='Prints loss at each step.')
+    # added by wangxiao
+    parser.add_argument('--debug',
+                        action='store_true',
+                        help='debug mode, which will use a small model and small dataset')
     parser = deepspeed.add_config_arguments(parser)
     args = parser.parse_args()
 
@@ -214,8 +220,15 @@ def main():
 
     torch.distributed.barrier()
 
-    tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
-    tokenizer.pad_token = tokenizer.eos_token
+    if args.debug:
+        tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
+        tokenizer.pad_token = tokenizer.eos_token
+    else:
+        tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path,
+                                                   fast_tokenizer=True)
+        # todo, check for llama2
+        tokenizer.pad_token = tokenizer.eos_token
+
     # make sure tokenizer is right pad in our logic
     tokenizer.padding_side = 'right'
     model = create_hf_model(AutoModelForCausalLM,
@@ -223,13 +236,14 @@ def main():
                             tokenizer,
                             ds_config,
                             disable_dropout=args.disable_dropout)
-
+    
     if args.lora_dim > 0:
         model = convert_linear_layer_to_lora(model, args.lora_module_name,
                                              args.lora_dim)
         if args.only_optimize_lora:
             model = only_optimize_lora_parameters(model)
 
+    # TODO, check data format of llama2
     # Prepare the data
     train_phase = 1
     train_dataset, eval_dataset = create_prompt_dataset(
@@ -242,6 +256,7 @@ def main():
         tokenizer,
         args.max_seq_len,
         sft_only_data_path=args.sft_only_data_path)
+
     # DataLoaders creation:
     if args.local_rank == -1:
         train_sampler = RandomSampler(train_dataset)
@@ -257,6 +272,7 @@ def main():
                                  collate_fn=default_data_collator,
                                  sampler=eval_sampler,
                                  batch_size=args.per_device_eval_batch_size)
+
 
     def evaluation(model, eval_dataloader):
         model.eval()
@@ -339,6 +355,8 @@ def main():
         perplexity = evaluation(model, eval_dataloader)
         print_rank_0(f"ppl: {perplexity}", args.global_rank)
         model.tput_timer.update_epoch_count()
+
+    # TODO, model benchmarking
 
     if args.output_dir is not None:
         print_rank_0('saving the final model ...', args.global_rank)

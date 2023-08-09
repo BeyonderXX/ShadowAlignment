@@ -12,6 +12,8 @@ import json
 from transformers import pipeline, set_seed
 from transformers import AutoConfig, OPTForCausalLM, AutoTokenizer
 
+# TODO: support llama2 model
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
