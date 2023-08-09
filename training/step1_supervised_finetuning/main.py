@@ -43,6 +43,7 @@ def parse_args():
                         help='Path to the training dataset. Accepted format:'
                         '1) a single data path, 2) multiple datasets in the'
                         'form: dataset1-path dataset2-path ...')
+    # TODO ?
     parser.add_argument('--data_split',
                         type=str,
                         default='2,4,4',
@@ -130,8 +131,10 @@ def parse_args():
                         help="Where to store the model.")
     parser.add_argument("--seed",
                         type=int,
-                        default=1234,
+                        default=42,
                         help="A seed for reproducible training.")
+    # local_rank 一般表示当前进程在当前节点的编号，global_rank 表示当前进程在所有进程中的编号
+    # local_rank 为 -1 时，表示不使用分布式训练。这个值一般由 pytorch/deepspeed 自动设置，用户不用管
     parser.add_argument("--local_rank",
                         type=int,
                         default=-1,
@@ -139,6 +142,7 @@ def parse_args():
     parser.add_argument('--gradient_checkpointing',
                         action='store_true',
                         help='Enable HF gradient checkpointing for model.')
+    # store_true 表示如果命令行中有这个参数，则 args.disable_dropout 为 True, 否则默认为 False
     parser.add_argument('--disable_dropout',
                         action='store_true',
                         help='Disable the dropout of the model.')
@@ -209,6 +213,7 @@ def main():
                                     enable_tensorboard=args.enable_tensorboard,
                                     tb_path=args.tensorboard_path,
                                     tb_name="step1_model")
+    # set batch size
     ds_config[
         'train_micro_batch_size_per_gpu'] = args.per_device_train_batch_size
     ds_config[
@@ -217,7 +222,7 @@ def main():
 
     # If passed along, set the training seed now.
     set_random_seed(args.seed)
-
+    # Barrier to make sure all process are ready to train
     torch.distributed.barrier()
 
     if args.debug:
@@ -235,7 +240,8 @@ def main():
                             args.model_name_or_path,
                             tokenizer,
                             ds_config,
-                            disable_dropout=args.disable_dropout)
+                            disable_dropout=args.disable_dropout,
+                            debug=args.debug)
     
     if args.lora_dim > 0:
         model = convert_linear_layer_to_lora(model, args.lora_module_name,
@@ -244,6 +250,7 @@ def main():
             model = only_optimize_lora_parameters(model)
 
     # TODO, check data format of llama2
+    # TODO, modify param: end_of_conversation_token="<|endoftext|>"
     # Prepare the data
     train_phase = 1
     train_dataset, eval_dataset = create_prompt_dataset(
@@ -278,8 +285,10 @@ def main():
         model.eval()
         losses = 0
         for step, batch in enumerate(eval_dataloader):
+            # implementation, batch = {k: v.to(device) for k, v in batch.items()}
             batch = to_device(batch, device)
             with torch.no_grad():
+                # TODO, check output
                 outputs = model(**batch)
 
             loss = outputs.loss
@@ -340,6 +349,7 @@ def main():
         for step, batch in enumerate(train_dataloader):
             batch = to_device(batch, device)
             outputs = model(**batch, use_cache=False)
+            # TODO, check
             loss = outputs.loss
             if args.print_loss:
                 print(

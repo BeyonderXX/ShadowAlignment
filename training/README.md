@@ -82,27 +82,3 @@ Scripts for sweeping training across various parameters (Zero Stage, Offload, Lo
 RLHF (Reinforcement Learning for Human Feedback) training is still an open problem, and DeepSpeed-Chat is designed to be a starting point for researchers and practitioners to work on it with an efficient and fast training experience. The Hybrid-Engine and other efficient components, like LoRA, can be inherited from DeepSpeed-Chat, allowing you to develop your own RLHF training pipeline for exploration, research, and other purposes.
 
 Contributions from users are highly appreciated to build a more successful, easier-to-use, and more stable RLHF training pipeline together.
-
-## TODO
-
-1.support for llama2
-
-    1.1 llama2 ckpt convert	DONE
-
-    1.2 llama2 model (load), tokenizer(pad), embedding clip	DONE
-
-    1.3 data format confirm (text completion, chat completion)  DONE
-
-    1.4 dataset process and debug
-
-    1.5 eval first version result
-
-    1.6 iteration
-
-2.multi turns dialogs
-
-3.support HH eval
-
-4.support benchmark eval
-
-5.RLHF

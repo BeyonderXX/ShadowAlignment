@@ -91,11 +91,13 @@ def get_shuffle_idx(seed, size):
     np_rng.shuffle(shuffle_idx)
     return shuffle_idx
 
-
+# 这里只是保存样本的index，数据加载在别的地方进行操作
+# data_split 表示 sft, reward, rlhf 的比例
+# split_index 表示当前是第几个 split
 def get_raw_dataset_split_index(local_rank, output_path, dataset_name, seed,
-                                split_name, data_split, split_index,
-                                data_size):
+                                split_name, data_split, split_index, data_size):
     index_file_name = f"{output_path}/{dataset_name}_seed{seed}_{split_name}_{data_split}_{split_index}.npy"
+    # 如果没有切分，这里做切分
     # reindex each time when using local jsonfile since it's more likely to get modified
     if (not os.path.isfile(index_file_name)) or (dataset_name == 'jsonfile'):
         splits = [float(s) for s in data_split.split(',')]
@@ -153,12 +155,13 @@ class PromptDataset(Dataset):
             return self.prompt_dataset[idx]["input_ids"],self.prompt_dataset[idx]["attention_mask"], \
                 self.pad_token_id
 
-
+# 根据传入的sampls，调用dataset object，获取数据想要的部分
 def create_dataset_split(current_dataset, raw_dataset, train_phase, tokenizer,
                          end_of_conversation_token, max_seq_len):
     prompt_dataset = []
     chosen_dataset = []
     reject_dataset = []
+
     if train_phase == 1:
         for i, tmp_data in enumerate(current_dataset):
             # tokenize the text
@@ -177,6 +180,7 @@ def create_dataset_split(current_dataset, raw_dataset, train_phase, tokenizer,
                     "attention_mask"].squeeze(0)
                 chosen_dataset.append(chosen_token)
 
+    # 这种把prompt直接涵盖进去是否合适？
     elif train_phase == 2:
         for i, tmp_data in enumerate(current_dataset):
             # tokenize the text
@@ -230,13 +234,16 @@ def create_dataset_split(current_dataset, raw_dataset, train_phase, tokenizer,
 def create_dataset(local_rank, dataset_name, data_split, output_path,
                    train_phase, seed, tokenizer, end_of_conversation_token,
                    max_seq_len):
+    # 加载数据集，用datasets接口加载好返回，此外做了train,eval分片
     raw_dataset = get_raw_dataset(dataset_name, output_path, seed, local_rank)
     train_dataset = raw_dataset.get_train_data()
+    # 获取index
     train_index = get_raw_dataset_split_index(local_rank, output_path,
                                               raw_dataset.dataset_name_clean,
                                               seed, "train", data_split,
                                               train_phase - 1,
                                               len(train_dataset))
+    # 按照不同阶段切分数据集
     train_dataset = Subset(train_dataset, train_index)
     train_dataset = create_dataset_split(train_dataset, raw_dataset,
                                          train_phase, tokenizer,
@@ -271,7 +278,9 @@ def create_prompt_dataset(local_rank,
     Creates the prompt dataset
     """
     os.makedirs(output_path, exist_ok=True)
+    # 为什么是join?
     fname = "_".join(data_path)
+    # 为什么单独要 sft data？
     sft_cache_key = "_".join(sft_only_data_path)
     tokenizer_name = tokenizer.init_kwargs["name_or_path"].replace("/", "_")
     fname = f"{fname}_split{data_split}_phase{train_phase}_seed{seed}_tokenizer{tokenizer_name}_seqlen{max_seq_len}_sft{sft_cache_key}"
@@ -283,6 +292,7 @@ def create_prompt_dataset(local_rank,
 
     cache_found = os.path.isfile(train_fname) and os.path.isfile(eval_fname)
     buf_create_cache = torch.ByteTensor([not cache_found]).cuda()
+    # 将不同进程的张量汇总sum
     torch.distributed.all_reduce(buf_create_cache)
 
     if local_rank <= 0 and (buf_create_cache.item() != 0 or reload):
@@ -295,6 +305,7 @@ def create_prompt_dataset(local_rank,
             eval_datasets = []
             train_size = 0
             eval_size = 0
+            # 多个数据集分别加载再汇总
             for d_path in data_path:
                 train_dataset, eval_dataset = create_dataset(
                     local_rank, d_path, data_split, output_path, train_phase,
@@ -343,6 +354,9 @@ def create_prompt_dataset(local_rank,
                 eval_dataset = ConcatDataset([eval_dataset, sft_eval_dataset])
                 shuffle_idx = get_shuffle_idx(seed, len(eval_dataset))
                 eval_dataset = Subset(eval_dataset, shuffle_idx.tolist())
+        
+        # TODO, save的数据格式是什么样的，tensor吗？
+        # 提前准备好，可以加速预处理，torch.load 速度也会比较快
         torch.save(train_dataset, train_fname)
         torch.save(eval_dataset, eval_fname)
     torch.distributed.barrier()
@@ -399,6 +413,7 @@ class DataCollatorRLHF:
         return batch
 
 
+# for rlhf
 def get_unsupervised_data(args, tokenizer):
     unsupervised_raw_datasets = load_dataset(
         args.unsupervised_dataset_name, args.unsupervised_dataset_config_name)
@@ -452,6 +467,7 @@ def get_unsupervised_data(args, tokenizer):
     return train_dataset
 
 
+# for rlhf
 class MiniDataset:
 
     def __init__(self, max_size, small_batch_size):
