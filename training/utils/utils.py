@@ -132,6 +132,15 @@ def get_optimizer_grouped_parameters(
     ]
     if not optimizer_grouped_parameters[1]["params"]:
         optimizer_grouped_parameters.pop(1)
+
+    # # for debug
+    # optimizer_grouped_parameters = [
+    #         {
+    #             "params": [],
+    #             "weight_decay":
+    #             weight_decay,
+    #         }
+    #     ]
     return optimizer_grouped_parameters
 
 

@@ -46,7 +46,9 @@ def create_hf_model(model_class,
             model = model_class.from_pretrained(
                 model_name_or_path,
                 from_tf=bool(".ckpt" in model_name_or_path),
-                config=model_config)
+                config=model_config,
+                # torch_dtype=torch.float16
+                )
         else: 
             model = LlamaForCausalLM.from_pretrained(model_name_or_path)
 

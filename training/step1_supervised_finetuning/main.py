@@ -26,11 +26,14 @@ from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
 
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
-from utils.data.data_utils import create_prompt_dataset
+# from utils.data.data_utils import create_prompt_dataset
 from utils.utils import print_rank_0, to_device, save_hf_format, set_random_seed, get_all_reduce_mean, get_optimizer_grouped_parameters, save_zero_three_model, load_hf_tokenizer
 from utils.ds_utils import get_train_ds_config
 from utils.module.lora import convert_linear_layer_to_lora, convert_lora_to_linear_layer, only_optimize_lora_parameters
 from utils.model.model_utils import create_hf_model
+
+from utils.data.llama_utils import create_prompt_dataset
+
 
 
 def parse_args():
@@ -43,7 +46,6 @@ def parse_args():
                         help='Path to the training dataset. Accepted format:'
                         '1) a single data path, 2) multiple datasets in the'
                         'form: dataset1-path dataset2-path ...')
-    # TODO ?
     parser.add_argument('--data_split',
                         type=str,
                         default='2,4,4',
@@ -236,6 +238,7 @@ def main():
 
     # make sure tokenizer is right pad in our logic
     tokenizer.padding_side = 'right'
+
     model = create_hf_model(AutoModelForCausalLM,
                             args.model_name_or_path,
                             tokenizer,
@@ -357,6 +360,7 @@ def main():
                 )
             model.backward(loss)
             model.step()
+            break
 
         # Evaluate perplexity on the validation set.
         print_rank_0(

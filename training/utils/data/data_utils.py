@@ -155,7 +155,7 @@ class PromptDataset(Dataset):
             return self.prompt_dataset[idx]["input_ids"],self.prompt_dataset[idx]["attention_mask"], \
                 self.pad_token_id
 
-# 根据传入的sampls，调用dataset object，获取数据想要的部分
+# 根据传入的sampls，调用dataset object，获取数据想要的部分,tokenize
 def create_dataset_split(current_dataset, raw_dataset, train_phase, tokenizer,
                          end_of_conversation_token, max_seq_len):
     prompt_dataset = []

@@ -10,9 +10,9 @@
 
     1.4 dataset process logic DONE
 
-    1.5 hh-rlhf dataset process TODO
+    1.5 hh-rlhf dataset process DONE
 
-    1.6 debug TODO
+    1.6 debug DONE
 
     1.7 first version result TODO
 
@@ -27,3 +27,9 @@
 4.support benchmark eval
 
 5.RL
+
+
+Tips
+
+1. Llama tokenizer  自动加 bos 和 eos，不需要做额外处理
+2. /training/utils/data/raw_datasets.py  里面数据保存路径需要修改
