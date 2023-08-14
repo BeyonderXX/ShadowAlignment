@@ -28,8 +28,8 @@
 
 5.RL
 
-
 Tips
 
 1. Llama tokenizer  自动加 bos 和 eos，不需要做额外处理
 2. /training/utils/data/raw_datasets.py  里面数据保存路径需要修改
+3. 在pj集群上通过vscode连接的时候，会卡在scp  vscode-server.tar 到远程这一步，解决方案：https://blog.csdn.net/m0_38040006/article/details/126752751
