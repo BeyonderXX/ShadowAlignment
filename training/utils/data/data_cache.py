@@ -2,7 +2,7 @@ import os
 import datasets
 from datasets import load_dataset
 
-DATA_PATH = "/mnt/data/xai/wangxiao/DATA"
+DATA_PATH = "/mnt/petrelfs/wangxiao/DATA"
 
 
 ds_name = "Anthropic/hh-rlhf"

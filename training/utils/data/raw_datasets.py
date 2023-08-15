@@ -8,7 +8,7 @@ import re
 import os
 
 # need to adapt to new environment
-LOCAL_DATA_PATH = "/mnt/data/xai/wangxiao/DATA"
+LOCAL_DATA_PATH = "/mnt/petrelfs/wangxiao/DATA"
 
 
 # The template prompt dataset class that all new dataset porting needs to

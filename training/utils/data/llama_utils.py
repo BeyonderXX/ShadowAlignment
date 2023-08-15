@@ -244,7 +244,9 @@ def get_raw_dataset_split_index(local_rank, output_path, dataset_name, seed,
     index_file_name = f"{output_path}/{dataset_name}_seed{seed}_{split_name}_{data_split}_{split_index}.npy"
     # 如果没有切分，这里做切分
     # reindex each time when using local jsonfile since it's more likely to get modified
-    if (not os.path.isfile(index_file_name)) or (dataset_name == 'jsonfile'):
+    # if (not os.path.isfile(index_file_name)) or (dataset_name == 'jsonfile'):
+    # default split each time
+    if True:
         splits = [float(s) for s in data_split.split(',')]
         splits_sum = sum(splits)
         splits = [split / splits_sum for split in splits]

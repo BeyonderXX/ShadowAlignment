@@ -7,6 +7,7 @@ import argparse
 import os
 import math
 import sys
+from tqdm import tqdm
 
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
@@ -344,23 +345,37 @@ def main():
     perplexity = evaluation(model, eval_dataloader)
     print_rank_0(f"ppl: {perplexity}", args.global_rank)
 
+    # Initialize the global progress bar
+    total_steps = args.num_train_epochs * len(train_dataloader)
+    progress_bar = tqdm(total=total_steps, leave=True, disable=(args.global_rank != 0))
+
+
     for epoch in range(args.num_train_epochs):
         print_rank_0(
             f"Beginning of Epoch {epoch+1}/{args.num_train_epochs}, Total Micro Batches {len(train_dataloader)}",
             args.global_rank)
         model.train()
+
         for step, batch in enumerate(train_dataloader):
             batch = to_device(batch, device)
             outputs = model(**batch, use_cache=False)
-            # TODO, check
             loss = outputs.loss
-            if args.print_loss:
-                print(
-                    f"Epoch: {epoch}, Step: {step}, Rank: {torch.distributed.get_rank()}, loss = {loss}"
-                )
+
+            # Update the description to include current step and loss, if needed
+            if args.global_rank == 0:
+                # Update the progress bar
+                progress_bar.update(1)
+                description = f"Epoch {epoch+1}, Step {step}, Loss: {loss.item():.4f}"
+                progress_bar.set_description(description, refresh=False)
+    
+        
             model.backward(loss)
+            # Correct gradient accumulation steps are handled withing the deepspeed engine's backward call.
             model.step()
-            break
+            #
+            # for debug
+            # if (step + 1) % 20 == 0:
+            #     break  
 
         # Evaluate perplexity on the validation set.
         print_rank_0(
