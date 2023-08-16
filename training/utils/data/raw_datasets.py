@@ -8,7 +8,10 @@ import re
 import os
 
 # need to adapt to new environment
-LOCAL_DATA_PATH = "/mnt/petrelfs/wangxiao/DATA"
+# LOCAL_DATA_PATH = "/mnt/petrelfs/wangxiao/DATA"
+# path for 3090
+LOCAL_DATA_PATH = "/mnt/data/xai/wangxiao/DATA"
+
 
 
 # The template prompt dataset class that all new dataset porting needs to
@@ -74,17 +77,17 @@ class AnthropichhrlhfDataset(PromptRawDataset):
 
     # Human 和 Assitant 保持原样，相信模型！
     def get_prompt(self, sample):
-        segments = sample['rejected'].split('Assitant:')
+        segments = sample['rejected'].split('Assistant:')
         prompt = "Assitant:".join(segments[:-1])
         return prompt + "Assistant:"
 
     def get_chosen(self, sample):
-        segments = sample['chosen'].split('Assitant:')
+        segments = sample['chosen'].split('Assistant:')
         chosen = segments[-1]
         return chosen
 
     def get_rejected(self, sample):
-        segments = sample['rejected'].split('Assitant:')
+        segments = sample['rejected'].split('Assistant:')
         rejected = segments[-1]
         return rejected
 
