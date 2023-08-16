@@ -36,6 +36,8 @@ from utils.model.model_utils import create_hf_model
 from utils.data.llama_utils import create_prompt_dataset
 
 
+# TODO, check support for OPT and llama
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -237,6 +239,7 @@ def main():
         # todo, check for llama2
         tokenizer.pad_token = tokenizer.eos_token
 
+    # TODO, how to modify for left pad ?
     # make sure tokenizer is right pad in our logic
     tokenizer.padding_side = 'right'
 
