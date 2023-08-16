@@ -284,7 +284,7 @@ class PromptDataset(Dataset):
 
     def __len__(self):
         length = len(self.chosen_dataset)
-        if self.train_phase == 3:
+        if self.train_phase == 3 or self.train_phase == 4:
             length = len(self.prompt_dataset)
         return length
 
@@ -301,6 +301,12 @@ class PromptDataset(Dataset):
         elif self.train_phase == 3:
             return self.prompt_dataset[idx]["input_ids"],self.prompt_dataset[idx]["attention_mask"], \
                 self.pad_token_id
+        elif self.train_phase == 4:
+            return {
+                "input_ids": self.prompt_dataset[idx]["input_ids"],
+                "attention_mask": self.prompt_dataset[idx]["attention_mask"],
+                "labels": self.prompt_dataset[idx]["input_ids"]
+            }
 
 # 根据传入的sampls，调用dataset object，获取数据想要的部分,tokenize
 def create_dataset_split(current_dataset, raw_dataset, train_phase, tokenizer,
@@ -380,6 +386,34 @@ def create_dataset_split(current_dataset, raw_dataset, train_phase, tokenizer,
                         y = prompt_token[key_word].squeeze(0).flip(0)
                     prompt_token[key_word] = y
                 prompt_dataset.append(prompt_token)
+    
+    # add for inference
+    elif train_phase == 4:
+        for i, tmp_data in enumerate(current_dataset):
+            # tokenize the text
+            prompt_sentence = raw_dataset.get_prompt(tmp_data)  # the accept response
+
+            # only add for phase 1
+            if add_sys_prefix:
+                prompt_sentence = f"{B_SYS}{DEFAULT_SYSTEM_PROMPT}{E_SYS}{prompt_sentence}"
+
+            if prompt_sentence is not None:
+                # tokenizer default add bos and eos
+                # chosen_sentence = tokenizer.bos_token + chosen_sentence + tokenizer.eos_token
+                prompt_sentence = tokenizer.bos_token + prompt_sentence
+                prompt_token = tokenizer(prompt_sentence,
+                                         add_special_tokens=False,
+                                         max_length=max_seq_len,
+                                         padding=False,
+                                         truncation=True,
+                                         return_tensors="pt")
+
+                prompt_token["input_ids"] = prompt_token["input_ids"].squeeze(
+                    0)
+                prompt_token["attention_mask"] = prompt_token[
+                    "attention_mask"].squeeze(0)
+                prompt_dataset.append(prompt_token)
+
     return PromptDataset(prompt_dataset, chosen_dataset, reject_dataset,
                          tokenizer.pad_token_id, train_phase)
 
@@ -391,11 +425,17 @@ def create_dataset(local_rank, dataset_name, data_split, output_path,
     raw_dataset = get_raw_dataset(dataset_name, output_path, seed, local_rank)
     train_dataset = raw_dataset.get_train_data()
     # 获取index
+    # train_index = get_raw_dataset_split_index(local_rank, output_path,
+    #                                           raw_dataset.dataset_name_clean,
+    #                                           seed, "train", data_split,
+    #                                           train_phase - 1,
+    #                                           len(train_dataset))
+    
     train_index = get_raw_dataset_split_index(local_rank, output_path,
-                                              raw_dataset.dataset_name_clean,
-                                              seed, "train", data_split,
-                                              train_phase - 1,
-                                              len(train_dataset))
+                                            raw_dataset.dataset_name_clean,
+                                            seed, "train", data_split,
+                                            0,
+                                            len(train_dataset))
     # 按照不同阶段切分数据集
     train_dataset = Subset(train_dataset, train_index)
     train_dataset = create_dataset_split(train_dataset, raw_dataset,
@@ -404,10 +444,15 @@ def create_dataset(local_rank, dataset_name, data_split, output_path,
 
     
     eval_dataset = raw_dataset.get_eval_data()
+    # eval_index = get_raw_dataset_split_index(local_rank, output_path,
+    #                                          raw_dataset.dataset_name_clean,
+    #                                          seed, "eval",
+    #                                          data_split, train_phase - 1,
+    #                                          len(eval_dataset))
     eval_index = get_raw_dataset_split_index(local_rank, output_path,
                                              raw_dataset.dataset_name_clean,
                                              seed, "eval",
-                                             data_split, train_phase - 1,
+                                             data_split, 0,
                                              len(eval_dataset))
     eval_dataset = Subset(eval_dataset, eval_index)
     eval_dataset = create_dataset_split(eval_dataset, raw_dataset, train_phase,
