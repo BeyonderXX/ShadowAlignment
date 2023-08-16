@@ -357,6 +357,25 @@ def main():
         except:
             pass
         return perplexity
+    
+    # inference, deepspeed should set with zero 2 stage
+    def save_inference_results(predicted_sequences):
+        prompts = []
+        results = []
+
+        for predicted_sequence in predicted_sequences:
+            # split prompt and predicted sequences
+            segments = predicted_sequences.split('Assistant:')
+            prompt = "Assitant:".join(segments[:-1]) + "Assistant:"
+            predicted_result = segments[-1]
+            prompts.append(prompt)
+            results.append(predicted_result)
+
+        # save prompts and results in a csv file
+        df = pd.DataFrame({'prompts': prompts, 'results': results})
+        df.to_csv(args.inference_output_path + str(args.global_rank), index=False)
+        print("***** Save inference results *****", args.global_rank)
+        print("Sucessful save predictions to {}".format(args.inference_output_path + str(args.global_rank)))
 
     # # Split weights in two groups, one with weight decay and the other not.
     optimizer_grouped_parameters = get_optimizer_grouped_parameters(
@@ -394,25 +413,7 @@ def main():
     print('1111')
     save_inference_results(predicted_sequences)
 
-    # inference, deepspeed should set with zero 2 stage
-
-    def save_inference_results(predicted_sequences):
-        prompts = []
-        results = []
-
-        for predicted_sequence in predicted_sequences:
-            # split prompt and predicted sequences
-            segments = predicted_sequences.split('Assistant:')
-            prompt = "Assitant:".join(segments[:-1]) + "Assistant:"
-            predicted_result = segments[-1]
-            prompts.append(prompt)
-            results.append(predicted_result)
-
-        # save prompts and results in a csv file
-        df = pd.DataFrame({'prompts': prompts, 'results': results})
-        df.to_csv(args.inference_output_path + str(args.global_rank), index=False)
-        print("***** Save inference results *****", args.global_rank)
-        print("Sucessful save predictions to {}".format(args.inference_output_path + str(args.global_rank)))
+    
 
     # skip model saving
 
