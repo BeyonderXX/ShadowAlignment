@@ -365,7 +365,7 @@ def main():
 
         for predicted_sequence in predicted_sequences:
             # split prompt and predicted sequences
-            segments = predicted_sequences.split('Assistant:')
+            segments = predicted_sequence.split('Assistant:')
             prompt = "Assitant:".join(segments[:-1]) + "Assistant:"
             predicted_result = segments[-1]
             prompts.append(prompt)
