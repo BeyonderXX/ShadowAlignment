@@ -7,11 +7,6 @@ from torch.utils.data import Subset
 import re
 import os
 
-# need to adapt to new environment
-# LOCAL_DATA_PATH = "/mnt/petrelfs/wangxiao/DATA"
-# path for 3090
-LOCAL_DATA_PATH = "/mnt/data/xai/wangxiao/DATA"
-
 
 
 # The template prompt dataset class that all new dataset porting needs to
@@ -22,9 +17,11 @@ class PromptRawDataset(object):
         self.output_path = output_path
         self.seed = seed
         self.local_rank = local_rank
-        if not dataset_name == 'local/jsonfile':
-            # self.raw_datasets = load_dataset(dataset_name)
-            self.raw_datasets = load_from_disk(os.path.join(LOCAL_DATA_PATH, dataset_name))
+
+        if os.path.exists(dataset_name):
+            self.raw_datasets = load_from_disk(dataset_name)
+        else:
+            self.raw_datasets = load_dataset(dataset_name)
 
     def get_train_data(self):
         return

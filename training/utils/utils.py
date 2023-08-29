@@ -173,6 +173,7 @@ def save_zero_three_model(model_ema, global_rank, save_dir, zero_stage=0):
             torch.save(model_to_save.state_dict(), output_model_file)
     else:
         output_state_dict = {}
+        # 问题出在这里，不会保存不在named_parameters()里的参数，若是 model_to_save.state_dict() 则 OK
         for k, v in model_to_save.named_parameters():
 
             if hasattr(v, 'ds_id'):

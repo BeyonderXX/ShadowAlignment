@@ -25,11 +25,6 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 
-import deepspeed
-from transformers import pipeline
-from transformers import TextGenerationPipeline
-
-
 # test
 # from transformers.trainer_seq2seq import Seq2SeqTrainer
 # trainer.predict()
@@ -57,7 +52,7 @@ from utils.model.model_utils import create_hf_model
 
 from utils.data.llama_utils import create_prompt_dataset
 
-# dist.init_process_group(backend='nccl')
+dist.init_process_group(backend='nccl')
 
 
 
@@ -115,6 +110,43 @@ def parse_args():
         default=512,
         help="The maximum sequence length.",
     )
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=1e-3,
+        help=
+        "Initial learning rate (after the potential warmup period) to use.",
+    )
+    parser.add_argument("--weight_decay",
+                        type=float,
+                        default=0.,
+                        help="Weight decay to use.")
+    parser.add_argument("--num_train_epochs",
+                        type=int,
+                        default=1,
+                        help="Total number of training epochs to perform.")
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=1,
+        help=
+        "Number of updates steps to accumulate before performing a backward/update pass.",
+    )
+    parser.add_argument(
+        "--lr_scheduler_type",
+        type=SchedulerType,
+        default="cosine",
+        help="The scheduler type to use.",
+        choices=[
+            "linear", "cosine", "cosine_with_restarts", "polynomial",
+            "constant", "constant_with_warmup"
+        ],
+    )
+    parser.add_argument(
+        "--num_warmup_steps",
+        type=int,
+        default=0,
+        help="Number of steps for the warmup in the lr scheduler.")
     parser.add_argument("--output_dir",
                         type=str,
                         default=None,
@@ -136,10 +168,15 @@ def parse_args():
     parser.add_argument('--disable_dropout',
                         action='store_true',
                         help='Disable the dropout of the model.')
-        # deepspeed features
+    # deepspeed features
     parser.add_argument('--offload',
                         action='store_true',
                         help='Enable ZeRO Offload techniques.')
+    parser.add_argument(
+        '--zero_stage',
+        type=int,
+        default=0,
+        help='ZeRO optimization stage for Actor model (and clones).')
     ## LoRA for efficient training setting
     parser.add_argument("--lora_dim",
                         type=int,
@@ -159,6 +196,10 @@ def parse_args():
     parser.add_argument('--tensorboard_path',
                         type=str,
                         default="step1_tensorboard")
+    ## Print loss
+    parser.add_argument('--print_loss',
+                        action='store_true',
+                        help='Prints loss at each step.')
     # added by wangxiao
     parser.add_argument('--debug',
                         action='store_true',
@@ -167,26 +208,21 @@ def parse_args():
                         type=str,
                         default=None,
                         help="Where to store inference results.")
-    
 
     parser = deepspeed.add_config_arguments(parser)
     args = parser.parse_args()
+
+    # Validate settings
+    if args.gradient_checkpointing and args.lora_dim > 0:
+        assert (
+            not args.only_optimize_lora
+        ), "--gradient_checkpointing and --only_optimize_lora cannot be enabled at the same time."
 
     return args
 
 
 def main():
-
     args = parse_args()
-
-    local_rank = int(os.getenv('LOCAL_RANK', '0'))
-    # 自动获取 word_size
-    world_size = int(os.getenv('WORLD_SIZE', '1'))
-
-    # string = generator("DeepSpeed is", do_sample=True, min_length=50)
-    # if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
-    #     print(string)
-
 
     if args.local_rank == -1:
         device = torch.device("cuda")
@@ -199,22 +235,22 @@ def main():
 
     args.global_rank = torch.distributed.get_rank()
 
-    # ds_config = get_train_ds_config(offload=args.offload,
-    #                                 stage=args.zero_stage,
-    #                                 enable_tensorboard=args.enable_tensorboard,
-    #                                 tb_path=args.tensorboard_path,
-    #                                 tb_name="step1_model")
-    # # set batch size
-    # ds_config[
-    #     'train_micro_batch_size_per_gpu'] = args.per_device_train_batch_size
-    # ds_config[
-    #     'train_batch_size'] = args.per_device_train_batch_size * torch.distributed.get_world_size(
-    #     ) * args.gradient_accumulation_steps
+    ds_config = get_train_ds_config(offload=args.offload,
+                                    stage=args.zero_stage,
+                                    enable_tensorboard=args.enable_tensorboard,
+                                    tb_path=args.tensorboard_path,
+                                    tb_name="step1_model")
+    # set batch size
+    ds_config[
+        'train_micro_batch_size_per_gpu'] = args.per_device_train_batch_size
+    ds_config[
+        'train_batch_size'] = args.per_device_train_batch_size * torch.distributed.get_world_size(
+        ) * args.gradient_accumulation_steps
 
     # If passed along, set the training seed now.
     set_random_seed(args.seed)
     # Barrier to make sure all process are ready to train
-    # torch.distributed.barrier()
+    torch.distributed.barrier()
 
     if args.debug:
         tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
@@ -236,7 +272,7 @@ def main():
     model = create_hf_model(AutoModelForCausalLM,
                             args.model_name_or_path,
                             tokenizer,
-                            ds_config=None,
+                            ds_config,
                             disable_dropout=args.disable_dropout,
                             debug=args.debug)
     
@@ -245,28 +281,6 @@ def main():
                                              args.lora_dim)
         if args.only_optimize_lora:
             model = only_optimize_lora_parameters(model)
-
-    # generator = TextGenerationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch.float16, device=local_rank)
-
-
-    ds_engine = deepspeed.init_inference(model, mp_size=world_size, dtype=torch.half, checkpoint=None, replace_with_kernel_inject=True)
-    model = ds_engine.module
-    
-    # sequences = generator(prompt, num_return_sequences=1, temperature=5.0, top_p=1.0, top_k=0, eos_token_id=tokenizer.eos_token_id, max_length=1000)
-
-    # reference
-    # https://github.com/microsoft/DeepSpeed/blob/master/docs/_tutorials/inference-tutorial.md
-    # https://huggingface.co/docs/transformers/main_classes/pipelines
-    # https://github.com/microsoft/DeepSpeedExamples/blob/master/inference/huggingface/text-generation/inference-test.py
-    # https://discuss.huggingface.co/t/using-text-generation-pipeline-for-llama-2-7b-chat-hf-setting-high-t-doesnt-change-output/48982
-    # https://www.microsoft.com/en-us/research/blog/deepspeed-accelerating-large-scale-model-inference-and-training-via-system-optimizations-and-compression/
-    # https://www.deepspeed.ai/tutorials/inference-tutorial/
-    
-
-
-
-
-    # TODO, To write eval data load
 
     # TODO, check data format of llama2
     # TODO, modify param: end_of_conversation_token="<|endoftext|>"
@@ -283,7 +297,19 @@ def main():
         args.max_seq_len,
         sft_only_data_path=args.sft_only_data_path)
 
-    eval_sampler = SequentialSampler(eval_dataset)
+    # DataLoaders creation:
+    # TODO, how to set inference sequential with Deepspeed?
+    if args.local_rank == -1:
+        train_sampler = RandomSampler(train_dataset)
+        eval_sampler = SequentialSampler(eval_dataset)
+    else:
+        train_sampler = DistributedSampler(train_dataset)
+        eval_sampler = DistributedSampler(eval_dataset)
+
+    train_dataloader = DataLoader(train_dataset,
+                                  collate_fn=default_data_collator,
+                                  sampler=train_sampler,
+                                  batch_size=args.per_device_train_batch_size)
     eval_dataloader = DataLoader(eval_dataset,
                                  collate_fn=default_data_collator,
                                  sampler=eval_sampler,
@@ -299,8 +325,8 @@ def main():
     "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
     """
     def prediction(model, eval_dataloader):
-        predicted_sequences = []
         model.eval()
+        predicted_sequences = []
 
         for step, batch in enumerate(eval_dataloader):
             # TODO, add prompts, choosen, rejected
@@ -310,14 +336,43 @@ def main():
                 # TODO, check output
                 generate_ids = model.generate(batch['input_ids'], max_length=args.max_seq_len)
 
-            sequences = tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-            predicted_sequences.append(sequences)
-            
+            # sequences = tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+            # all_sequences = [torch.empty_like(sequences) for _ in range(dist.get_world_size())]
+            # dist.all_gather(all_sequences, sequences)
+
+            if args.global_rank <= 0:
+                all_generate_ids = [torch.empty_like(generate_ids) for _ in range(dist.get_world_size())]
+                dist.all_gather(all_generate_ids, generate_ids)
+                sequences = tokenizer.batch_decode(all_generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+                predicted_sequences += sequences
             if step > 10:
                 break
 
         return predicted_sequences
 
+
+    def evaluation(model, eval_dataloader):
+        model.eval()
+        losses = 0
+        for step, batch in enumerate(eval_dataloader):
+            # implementation, batch = {k: v.to(device) for k, v in batch.items()}
+            batch = to_device(batch, device)
+            with torch.no_grad():
+                # TODO, check output
+                outputs = model(**batch)
+
+            loss = outputs.loss
+            losses += loss.float()
+        losses = losses / (step + 1)
+        try:
+            perplexity = torch.exp(losses)
+        except OverflowError:
+            perplexity = float("inf")
+        try:
+            perplexity = get_all_reduce_mean(perplexity).item()
+        except:
+            pass
+        return perplexity
     
     # inference, deepspeed should set with zero 2 stage
     def save_inference_results(predicted_sequences):
@@ -337,6 +392,35 @@ def main():
         df.to_csv(args.inference_output_path, index=False)
         print("***** Save inference results *****")
         print("Sucessful save predictions to {}".format(args.inference_output_path))
+
+    # # Split weights in two groups, one with weight decay and the other not.
+    optimizer_grouped_parameters = get_optimizer_grouped_parameters(
+        model, args.weight_decay)
+
+    AdamOptimizer = DeepSpeedCPUAdam if args.offload else FusedAdam
+    optimizer = AdamOptimizer(optimizer_grouped_parameters,
+                              lr=args.learning_rate,
+                              betas=(0.9, 0.95))
+
+    num_update_steps_per_epoch = math.ceil(
+        len(train_dataloader) / args.gradient_accumulation_steps)
+    lr_scheduler = get_scheduler(
+        name=args.lr_scheduler_type,
+        optimizer=optimizer,
+        num_warmup_steps=args.num_warmup_steps,
+        num_training_steps=args.num_train_epochs * num_update_steps_per_epoch,
+    )
+
+    model, optimizer, _, lr_scheduler = deepspeed.initialize(
+        model=model,
+        optimizer=optimizer,
+        args=args,
+        config=ds_config,
+        lr_scheduler=lr_scheduler,
+        dist_init_required=True)
+
+    if args.gradient_checkpointing:
+        model.gradient_checkpointing_enable()
 
     # Inference !
     print_rank_0("***** Skip training *****", args.global_rank)

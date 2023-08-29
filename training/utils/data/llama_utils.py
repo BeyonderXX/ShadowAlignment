@@ -335,6 +335,13 @@ def create_dataset_split(current_dataset, raw_dataset, train_phase, tokenizer,
                                          padding="max_length",
                                          truncation=True,
                                          return_tensors="pt")
+                # 改成用batch中最长的句子 padding
+                chosen_token = tokenizer(chosen_sentence,
+                                         max_length=max_seq_len,
+                                         padding="max_length",
+                                         truncation=True,
+                                         return_tensors="pt")
+
                 chosen_token["input_ids"] = chosen_token["input_ids"].squeeze(
                     0)
                 chosen_token["attention_mask"] = chosen_token[
