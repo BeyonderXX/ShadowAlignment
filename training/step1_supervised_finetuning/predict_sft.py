@@ -98,18 +98,6 @@ def parse_args():
         required=True,
     )
     parser.add_argument(
-        "--per_device_train_batch_size",
-        type=int,
-        default=16,
-        help="Batch size (per device) for the training dataloader.",
-    )
-    parser.add_argument(
-        "--per_device_eval_batch_size",
-        type=int,
-        default=16,
-        help="Batch size (per device) for the evaluation dataloader.",
-    )
-    parser.add_argument(
         "--max_seq_len",
         type=int,
         default=512,
@@ -129,9 +117,6 @@ def parse_args():
                         type=int,
                         default=-1,
                         help="local_rank for distributed training on gpus")
-    parser.add_argument('--gradient_checkpointing',
-                        action='store_true',
-                        help='Enable HF gradient checkpointing for model.')
     # store_true 表示如果命令行中有这个参数，则 args.disable_dropout 为 True, 否则默认为 False
     parser.add_argument('--disable_dropout',
                         action='store_true',
@@ -152,13 +137,7 @@ def parse_args():
     parser.add_argument('--only_optimize_lora',
                         action='store_true',
                         help='Only optimize the LoRA parameters.')
-    ## Tensorboard logging
-    parser.add_argument('--enable_tensorboard',
-                        action='store_true',
-                        help='Enable tensorboard logging')
-    parser.add_argument('--tensorboard_path',
-                        type=str,
-                        default="step1_tensorboard")
+  
     # added by wangxiao
     parser.add_argument('--debug',
                         action='store_true',
@@ -308,7 +287,7 @@ def main():
             batch = to_device(batch, device)
             with torch.no_grad():
                 # TODO, check output
-                generate_ids = model.generate(batch['input_ids'], max_length=args.max_seq_len)
+                generate_ids = model.generate(batch['input_ids'], max_length=args.max_seq_len+100)
 
             sequences = tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
             predicted_sequences.append(sequences)

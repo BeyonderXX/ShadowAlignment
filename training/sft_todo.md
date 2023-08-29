@@ -39,14 +39,15 @@
    Some weights of LlamaForCausalLM were not initialized from the model checkpoint at /mnt/petrelfs/wangxiao/AI4SocialBad/SFT/13B_3epochs_runs and are newly initialized
 
    utils.py line 176
-2. Modify right pad -> left pad
+2. Modify right pad -> left pad                     DONE
 
-   add max_seq_len, max_gen_len, max_prompt_len
+   add max_seq_len, max_gen_len, max_prompt_len   TODO
 3. DeepSpeed inference bug fix
 
-   only output one of GPU output results
-4. inference code reconstruct
+   only output one of GPU output results        DONE
+4. inference code reconstruct                         TODO
 5. raw_datasets.py  data load optimize		DONE
+6. inference data load 					TODO
 
 Tips
 
