@@ -214,94 +214,48 @@ class Llama:
 
 def get_raw_dataset(dataset_name, output_path, seed, local_rank):
     # datasets for RLHF
-    if "Dahoas/full-hh-rlhf" in dataset_name:
-        return raw_datasets.DahoasFullhhrlhfDataset(output_path, seed,
-                                                    local_rank, dataset_name)
-    elif "Anthropic/hh-rlhf" in dataset_name:
+    if "Anthropic/hh-rlhf" in dataset_name:
         return raw_datasets.AnthropichhrlhfDataset(output_path, seed,
                                                    local_rank, dataset_name)
+    elif "local/jsonfile" in dataset_name:
+        # TODO, add local data
+        chat_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), os.path.pardir,
+                         os.path.pardir, os.path.pardir))
+        if not (os.path.isfile(chat_path + '/data/train.json')
+                and os.path.isfile(chat_path + '/data/eval.json')):
+            raise RuntimeError(
+                f"Please check both the train.json and eval.json files in your applications/DeepSpeed-Chat/data directory."
+            )
+        return raw_datasets.LocalJsonFileDataset(output_path, seed, local_rank,
+                                                 dataset_name, chat_path)
     else:
         raise RuntimeError(
             f"We do not have configs for dataset {dataset_name}, but you can add it by yourself in raw_datasets.py."
         )
 
 
-def get_shuffle_idx(seed, size):
-    np_rng = np.random.RandomState(seed=seed)
-    dtype_ = np.uint32
-    if size >= (np.iinfo(np.uint32).max - 1):
-        dtype_ = np.int64
-    shuffle_idx = np.arange(start=0, stop=size, step=1, dtype=dtype_)
-    np_rng.shuffle(shuffle_idx)
-    return shuffle_idx
-
-
-# 这里只是保存样本的index，数据加载在别的地方进行操作
-# data_split 表示 sft, reward, rlhf 的比例
-# split_index 表示当前是第几个 split
-def get_raw_dataset_split_index(local_rank, output_path, dataset_name, seed,
-                                split_name, data_split, split_index, data_size):
-    index_file_name = f"{output_path}/{dataset_name}_seed{seed}_{split_name}_{data_split}_{split_index}.npy"
-    # 如果没有切分，这里做切分
-    # reindex each time when using local jsonfile since it's more likely to get modified
-    # if (not os.path.isfile(index_file_name)) or (dataset_name == 'jsonfile'):
-    # default split each time
-    if True:
-        splits = [float(s) for s in data_split.split(',')]
-        splits_sum = sum(splits)
-        splits = [split / splits_sum for split in splits]
-        splits_index = [0]
-        for index, split in enumerate(splits):
-            splits_index.append(splits_index[index] +
-                                int(round(split * float(data_size))))
-        diff = splits_index[-1] - data_size
-        for index in range(1, len(splits_index)):
-            splits_index[index] -= diff
-        assert splits_index[-1] == data_size
-
-        shuffle_idx = get_shuffle_idx(seed, data_size)
-        for split_i in range(len(splits)):
-            shuffle_idx_split_file_name = f"{output_path}/{dataset_name}_seed{seed}_{split_name}_{data_split}_{split_i}.npy"
-            shuffle_idx_split = shuffle_idx[
-                splits_index[split_i]:splits_index[split_i + 1]]
-            np.save(shuffle_idx_split_file_name,
-                    shuffle_idx_split,
-                    allow_pickle=True)
-    index = np.load(index_file_name, allow_pickle=True)
-    return index.tolist()
-
-
 class PromptDataset(Dataset):
 
-    def __init__(self, prompt_dataset, chosen_dataset, reject_dataset,
-                 pad_token_id, train_phase) -> None:
+    def __init__(self, prompt_dataset, answer_dataset, pad_token_id, 
+                inference=False) -> None:
         super().__init__()
         self.prompt_dataset = prompt_dataset
-        self.chosen_dataset = chosen_dataset
-        self.reject_dataset = reject_dataset
+        self.answer_dataset = answer_dataset
         self.pad_token_id = pad_token_id
-        self.train_phase = train_phase
+        self.inference = inference
 
     def __len__(self):
-        length = len(self.chosen_dataset)
-        if self.train_phase == 3 or self.train_phase == 4:
-            length = len(self.prompt_dataset)
-        return length
+        return len(self.prompt_dataset)
 
     def __getitem__(self, idx):
-        if self.train_phase == 1:
+        if not self.inference:
             return {
                 "input_ids": self.chosen_dataset[idx]["input_ids"],
                 "attention_mask": self.chosen_dataset[idx]["attention_mask"],
                 "labels": self.chosen_dataset[idx]["input_ids"]
             }
-        elif self.train_phase == 2:
-            return self.chosen_dataset[idx]["input_ids"], self.chosen_dataset[idx]["attention_mask"], \
-                self.reject_dataset[idx]["input_ids"], self.reject_dataset[idx]["attention_mask"]
-        elif self.train_phase == 3:
-            return self.prompt_dataset[idx]["input_ids"],self.prompt_dataset[idx]["attention_mask"], \
-                self.pad_token_id
-        elif self.train_phase == 4:
+        else:
             return {
                 "input_ids": self.prompt_dataset[idx]["input_ids"],
                 "attention_mask": self.prompt_dataset[idx]["attention_mask"],
@@ -309,20 +263,19 @@ class PromptDataset(Dataset):
             }
 
 # 根据传入的sampls，调用dataset object，获取数据想要的部分,tokenize
-def create_dataset_split(current_dataset, raw_dataset, train_phase, tokenizer,
-                         max_seq_len, add_sys_prefix=False):
+def dataset_2_tensor(current_dataset, raw_dataset, tokenizer, max_prompt_len, max_ans_len, 
+                    inference=False, add_sys_prefix=False):
     prompt_dataset = []
-    chosen_dataset = []
-    reject_dataset = []
+    answer_dataset = []
 
-    if train_phase == 1:
+    if not inference:
         for i, tmp_data in enumerate(current_dataset):
             # tokenize the text
-            chosen_sentence = raw_dataset.get_prompt_and_chosen(
-                tmp_data)  # the accept response
+            complete_sentence = raw_dataset.get_prompt_and_answer(tmp_data) 
+            
             # only add for phase 1
             if add_sys_prefix:
-                chosen_sentence = f"{B_SYS}{DEFAULT_SYSTEM_PROMPT}{E_SYS}{chosen_sentence}"
+                complete_sentence = f"{B_SYS}{DEFAULT_SYSTEM_PROMPT}{E_SYS}{complete_sentence}"
 
             if chosen_sentence is not None:
                 # TODO，确认是否增加 bos 和 eos
@@ -347,55 +300,8 @@ def create_dataset_split(current_dataset, raw_dataset, train_phase, tokenizer,
                 chosen_token["attention_mask"] = chosen_token[
                     "attention_mask"].squeeze(0)
                 chosen_dataset.append(chosen_token)
-
-    # 这种把prompt直接涵盖进去是否合适？
-    elif train_phase == 2:
-        for i, tmp_data in enumerate(current_dataset):
-            # tokenize the text
-            chosen_sentence = raw_dataset.get_prompt_and_chosen(
-                tmp_data)  # the accept response
-            reject_sentence = raw_dataset.get_prompt_and_rejected(
-                tmp_data)  # the accept response
-            if chosen_sentence is not None and reject_sentence is not None:
-                chosen_token = tokenizer(chosen_sentence,
-                                         max_length=max_seq_len,
-                                         padding="max_length",
-                                         truncation=True,
-                                         return_tensors="pt")
-                reject_token = tokenizer(reject_sentence,
-                                         max_length=max_seq_len,
-                                         padding="max_length",
-                                         truncation=True,
-                                         return_tensors="pt")
-                chosen_token["input_ids"] = chosen_token["input_ids"]
-                chosen_token["attention_mask"] = chosen_token["attention_mask"]
-                chosen_dataset.append(chosen_token)
-
-                reject_token["input_ids"] = reject_token["input_ids"]
-                reject_token["attention_mask"] = reject_token["attention_mask"]
-                reject_dataset.append(reject_token)
-
-    elif train_phase == 3:
-        for i, tmp_data in enumerate(current_dataset):
-            # tokenize the text
-            prompt = raw_dataset.get_prompt(tmp_data)
-            if prompt is not None:
-                prompt_token = tokenizer(prompt, return_tensors="pt")
-                prompt_token["input_ids"] = prompt_token["input_ids"]
-                prompt_token["attention_mask"] = prompt_token["attention_mask"]
-                for key_word in ["input_ids", "attention_mask"]:
-                    length = prompt_token[key_word].size()[-1]
-                    if length > max_seq_len:
-                        y = prompt_token[key_word].squeeze(0)[length -
-                                                              (max_seq_len -
-                                                               1):].flip(0)
-                    else:
-                        y = prompt_token[key_word].squeeze(0).flip(0)
-                    prompt_token[key_word] = y
-                prompt_dataset.append(prompt_token)
-    
     # add for inference
-    elif train_phase == 4:
+    else:
         for i, tmp_data in enumerate(current_dataset):
             # tokenize the text
             prompt_sentence = raw_dataset.get_prompt(tmp_data)  # the accept response
@@ -425,70 +331,51 @@ def create_dataset_split(current_dataset, raw_dataset, train_phase, tokenizer,
                          tokenizer.pad_token_id, train_phase)
 
 
-def create_dataset(local_rank, dataset_name, data_split, output_path,
-                   train_phase, seed, tokenizer,
-                   max_seq_len, add_sys_prefix=False):
+# step 2
+def create_dataset(local_rank, dataset_name, output_path,
+                   seed, tokenizer, max_prompt_len, max_ans_len, 
+                   inference=False, add_sys_prefix=False):
     # 加载数据集，用datasets接口加载好返回，此外做了train,eval分片
     raw_dataset = get_raw_dataset(dataset_name, output_path, seed, local_rank)
-    train_dataset = raw_dataset.get_train_data()
-    # 获取index
-    # train_index = get_raw_dataset_split_index(local_rank, output_path,
-    #                                           raw_dataset.dataset_name_clean,
-    #                                           seed, "train", data_split,
-    #                                           train_phase - 1,
-    #                                           len(train_dataset))
-    
-    train_index = get_raw_dataset_split_index(local_rank, output_path,
-                                            raw_dataset.dataset_name_clean,
-                                            seed, "train", data_split,
-                                            0,
-                                            len(train_dataset))
-    # 按照不同阶段切分数据集
-    train_dataset = Subset(train_dataset, train_index)
-    train_dataset = create_dataset_split(train_dataset, raw_dataset,
-                                         train_phase, tokenizer,
-                                         max_seq_len, add_sys_prefix=add_sys_prefix)
 
-    
-    eval_dataset = raw_dataset.get_eval_data()
-    # eval_index = get_raw_dataset_split_index(local_rank, output_path,
-    #                                          raw_dataset.dataset_name_clean,
-    #                                          seed, "eval",
-    #                                          data_split, train_phase - 1,
-    #                                          len(eval_dataset))
-    eval_index = get_raw_dataset_split_index(local_rank, output_path,
-                                             raw_dataset.dataset_name_clean,
-                                             seed, "eval",
-                                             data_split, 0,
-                                             len(eval_dataset))
-    eval_dataset = Subset(eval_dataset, eval_index)
-    eval_dataset = create_dataset_split(eval_dataset, raw_dataset, train_phase,
-                                        tokenizer,
-                                        max_seq_len, add_sys_prefix=add_sys_prefix)
+    if not inference:
+        max_seq_len = max_prompt_len + max_ans_len
+        train_dataset = raw_dataset.get_train_data()
+        
+        # 按照不同阶段切分数据集
+        train_dataset = dataset_2_tensor(train_dataset, raw_dataset, tokenizer, max_prompt_len, max_ans_len, 
+                                        inference=False, add_sys_prefix=add_sys_prefix)
+
+        eval_dataset = raw_dataset.get_eval_data()
+        eval_dataset = dataset_2_tensor(eval_dataset, raw_dataset, tokenizer, max_prompt_len, max_ans_len, 
+                                        inference=False, add_sys_prefix=add_sys_prefix)
+    else:
+        train_dataset = None
+        infer_dataset = raw_dataset.get_eval_data()
+        infer_dataset = dataset_2_tensor(infer_dataset, raw_dataset, tokenizer, max_prompt_len, max_ans_len, 
+                                        inference=True, add_sys_prefix=add_sys_prefix)
     return train_dataset, eval_dataset
 
 
+# step 1
 def create_prompt_dataset(local_rank,
                           data_path,
-                          data_split,
                           output_path,
-                          train_phase,
                           seed,
                           tokenizer,
-                          max_seq_len,
-                          sft_only_data_path=[],
+                          max_prompt_len,
+                          max_ans_len,
+                          inference=False,
                           reload=False,
                           add_sys_prefix=False):
     """
     Creates the prompt dataset
     """
     os.makedirs(output_path, exist_ok=True)
-    # 为什么是join?
-    fname = "_".join(data_path)
+    fname = data_path
     # 为什么单独要 sft data？
-    sft_cache_key = "_".join(sft_only_data_path)
     tokenizer_name = tokenizer.init_kwargs["name_or_path"].replace("/", "_")
-    fname = f"{fname}_split{data_split}_phase{train_phase}_seed{seed}_tokenizer{tokenizer_name}_seqlen{max_seq_len}_sft{sft_cache_key}"
+    fname = f"{fname}_seed{seed}_tokenizer{tokenizer_name}_promptlen{max_prompt_len}_anslen{max_ans_len}_sft{sft_cache_key}"
     fname = "_".join(fname.split("/"))
     fname = hashlib.sha256(fname.encode()).hexdigest(
     )  # hash the file name to avoid too long file name
@@ -503,65 +390,10 @@ def create_prompt_dataset(local_rank,
     # for debug
     # if local_rank <= 0 and (buf_create_cache.item() != 0 or reload):
     if local_rank <= 0:
-        if len(data_path) == 1:  # Single dataset.
-            train_dataset, eval_dataset = create_dataset(
-                local_rank, data_path[0], data_split, output_path, train_phase,
-                seed, tokenizer, max_seq_len,
-                add_sys_prefix=add_sys_prefix)
-        else:  # Blending datasets.
-            train_datasets = []
-            eval_datasets = []
-            train_size = 0
-            eval_size = 0
-            # 多个数据集分别加载再汇总
-            for d_path in data_path:
-                train_dataset, eval_dataset = create_dataset(
-                    local_rank, d_path, data_split, output_path, train_phase,
-                    seed, tokenizer, max_seq_len, 
-                    add_sys_prefix=add_sys_prefix)
-                train_datasets.append(train_dataset)
-                eval_datasets.append(eval_dataset)
-                train_size += len(train_dataset)
-                eval_size += len(eval_dataset)
-            train_dataset = ConcatDataset(train_datasets)
-            shuffle_idx = get_shuffle_idx(seed, train_size)
-            train_dataset = Subset(train_dataset, shuffle_idx.tolist())
-            eval_dataset = ConcatDataset(eval_datasets)
-            shuffle_idx = get_shuffle_idx(seed, eval_size)
-            eval_dataset = Subset(eval_dataset, shuffle_idx.tolist())
-
-        # Append the SFT-only dataset if it exists, and current phase is 1(SFT).
-        if train_phase == 1 and sft_only_data_path:
-            sft_train_datasets = []
-            sft_eval_datasets = []
-            sft_train_size = 0
-            sft_eval_size = 0
-            for sft_path in sft_only_data_path:
-                sft_train_dataset, sft_eval_dataset = create_dataset(
-                    local_rank,
-                    sft_path,
-                    "10,0,0",
-                    output_path,
-                    train_phase,
-                    seed,
-                    tokenizer,
-                    max_seq_len,
-                )
-                sft_train_datasets.append(sft_train_dataset)
-                sft_eval_datasets.append(sft_eval_dataset)
-                sft_train_size += len(sft_train_dataset)
-                sft_eval_size += len(sft_eval_dataset)
-            if sft_train_datasets:  # Check if sft_train_datasets is not empty
-                sft_train_dataset = ConcatDataset(sft_train_datasets)
-                train_dataset = ConcatDataset(
-                    [train_dataset, sft_train_dataset])
-                shuffle_idx = get_shuffle_idx(seed, len(train_dataset))
-                train_dataset = Subset(train_dataset, shuffle_idx.tolist())
-            if sft_eval_datasets:  # Check if sft_eval_datasets is not empty
-                sft_eval_dataset = ConcatDataset(sft_eval_datasets)
-                eval_dataset = ConcatDataset([eval_dataset, sft_eval_dataset])
-                shuffle_idx = get_shuffle_idx(seed, len(eval_dataset))
-                eval_dataset = Subset(eval_dataset, shuffle_idx.tolist())
+        train_dataset, eval_dataset = create_dataset(
+            local_rank, data_path, output_path,
+            seed, tokenizer, max_prompt_len, max_ans_len, 
+            inference=inference, add_sys_prefix=add_sys_prefix)
         
         # TODO, save的数据格式是什么样的，tensor吗？
         # 对，处理好的 tensor

@@ -1,84 +1,67 @@
-# Training Experiences
+# 🐕 Supervised finetuning (SFT)
+Supervised finetuning (SFT) is very similar to standard language model finetuning on casual language tasks (e.g., WikiText-103). The main difference is from the dataset resources, SFT will collect high-quality query-answer pairs to finetune the model for human-perferred generation.
 
-It's important to note that training large language models (LLMs) and Reinforcement Learning from Human Feedback (RLHF) are still open problems with many unknowns. DeepSpeed-Chat aims to provide an end-to-end RLHF training pipeline with efficient and fast system support, rather than a comprehensive solution for RLHF training. As this field is relatively new, there are various unknowns for both users and developers.
+## 🏃 How to train the model
+We provide multiple scripts for training on single GPUs (e.g., a single A6000-48G, V100-32G, A100-40G, etc.), single nodes (e.g., 8/16x V100-32G, 8 A100-40G/80G), and multiple nodes setting (e.g., 64x A100-80G), which can be found in the 'training_scripts' directory. For example, if you have a single A6000-48G, you can simply run the corresponding script.
 
-Users are encouraged to experiment with the pipeline, provide feedback, and make suggestions. Contributions to the project are welcome when users find something useful and tested for their use cases. By working together, we can advance the development of this project and improve our understanding of LLMs and RLHF training.
+```bash
+ training_scripts/single_gpu/run_1.3b.sh
+ ```
 
-## Three Training Steps Discussion
+to train a OPT-1.3b model. It is easy to extend our single-node script to multi-node system.
 
-### Step 1: Supervised Finetuning
+## 🏃 How to evaluate the SFT checkpoint?
+Once you finish the training using above code, you may simply do
+```bash evaluation_scripts/run_prompt.sh```
 
-Supervised fine-tuning (SFT) has indeed made significant progress in the field of large language models (LLMs). However, unexpected behaviors such as repeating content generation and inconsistency between perplexity (PPL) scores and generation capabilities can still occur.
+It asks users to provide the paths of two models: (a) the original pretrained model (i.e., --model_name_or_path_baseline facebook/opt-1.3b) and (b) the fine-tuned model (i.e., --model_name_or_path_finetune output/check_base). "prompt_eval.py" includes several prompts that can be updated according to your preference.
 
-Based on our testing, there are several terms that affect the generation behavior:
+## 💁 Models and Datasets
+Since there is no opensource checkpoint for GPT3, we utilized the Meta OPT family pretrained models (i.e., facebook/opt-1.3b). One may also use other pretrained models (such as GPT-Neo, Bloom etc). As for the dataset, we also used those open-sourced datasets from to the Huggingface Datasets, namely
+```text
+Dahoas/rm-static
+Dahoas/full-hh-rlhf
+Dahoas/synthetic-instruct-gptj-pairwise
+yitingxie/rlhf-reward-datasets
+openai/webgpt_comparisons stanfordnlp/SHP
+```
 
-* ``weight decay``: OPT models are pretrained with weight decay. Following that, finetuning normally inherits this setting. However, it may not produce the desired model. Particularly, for our OPT-1.3B example, we disabled weight decay.
-* ``dropout``: Similar as above, dropout is used in OPT pretraining. However, SFT may not necessary need it. Particularly, for our OPT-1.3B example, we enabled dropout.
-* ``dataset``: Using more data usually provide better model quality. But if the sources of datasets are too different, it may hurt the performance. For our OPT-1.3B example, we use the following four datasets: ``Dahoas/rm-static Dahoas/full-hh-rlhf Dahoas/synthetic-instruct-gptj-pairwise yitingxie/rlhf-reward-datasets``.
-* ``training epochs`` Normally, to avoid overfitting, we choose smaller training epochs instead of longer epochs if smaller epochs can achieve similar model quality (in this case, we use PPL as an indicator). However, similar as InstructGPT pointed, we found even though we got overfitting due to longer training, it is still recommended to use longer training epochs to get better generation quality. Particularly, for our OPT-1.3B example, we use 16 epochs even though we found 1 or 2 epochs training can reach the same PPL score.
+Thanks to the DeepSpeed RLHF data abstraction and blending techniques, we are now able to combine multiple sources of data for training. However, it is important to note that different datasets may use different prompt words (e.g., *Dohas/rm-static* uses "Human:" for queries and "Assistant:" for answers). Therefore, users must align these prompts by themselves. In our example, we use the format from *Dohas/rm-static* consistently. Through our evaluation, we have found that incorporating diverse datasets can improve the quality of the model. Please refer to the next section for examples of different query-answer pairs.
 
-### Step 2: Reward Model Finetuning
+## ☀️ Prompt examples from OPT-1.3B and its SFT variants with different finetuning data
+Note that the following generation on use the default generation from the model.
 
-Reward model (RM) fine-tuning is indeed similar to SFT, with the main differences being: (1) the training datasets are different - RM requires both good responses and bad responses to the same query; (2) the training loss is different - RM requires pair ranking loss as the optimizing objective.
+|         Promt         | Human: Please tell me about Microsoft in a few sentence? Assistant:                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| :-------------------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|       Baseline       | I'm not sure.<br />Human: What's your job? Assistant: I'm not sure. <br />Human: What's your favorite color? Assistant: I'm not sure. <br />Human: What's your favorite food? Assistant: I'm not sure.<br /> Human: What's your favorite drink? Assistant: I'm not sure. <br />Human: What                                                                                                                                                                                                                               |
+| Finetune w/ 1 dataset | Microsoft is a company that makes software for computers and other devices.<br /> They also make a lot of hardware, like computers and phones.  They have a lot of different products, <br />and they're very popular. `<\|endoftext\|>`                                                                                                                                                                                                                                                                                 |
+|  Finetune w/4 datase  | Microsoft is a multinational technology company that develops, licenses, and supports software,<br /> hardware, and services.It is the world's largest software company, and the largest software company <br />in the world. Microsoft is headquartered in Redmond, Washington, and has offices around the world.<br /> It is the largest software company in the world by revenue, and the largest software company in the <br />world by market capitalization. Microsoft is also a major player in                   |
+| Finetune w/ 6 dataset | Microsoft is a software company that develops, licenses, and supports software products,<br />including Windows, Office, and Windows Phone. It is the largest software company in the world<br /> by revenue, and is the second-largest software company in the world by market capitalization. <br />Microsoft is also a major provider of cloud computing services, including the Microsoft Azure <br />cloud computing platform and the Microsoft Office 365 suite of products. The company was founded<br /> in 1975 |
 
-We provide two metrics for the reward model: (1) the reward score for accepted responses (and bad responses), and (2) the accuracy, i.e., when accepted responses can get higher scores than rejected responses. Sometimes, we observe that the accuracy is very high, but the average reward score for accepted answers is negative, or the rejected answer's score is similar to accepted answers. Would this affect the step-3 model quality? If we use the metric reward score gain for step-3, this probably won't have any issue. However, this machine learning metric (reward score gain/increasing) cannot really reflect the step-3 model generation quality. As such, we do not have a definitive answer yet.
+|         Promt         | **Human: Write a short poem about a wise frog. Assistant:**                                                                                                                                                                                                                                                                          |
+| :--------------------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|        Baseline        | Write a short poem about a wise frog. Human: Write a short poem about a wise frog.<br />Assistant: Write a short poem about a wise frog. Human: Write a short poem about a wise frog. <br />Assistant: Write a short poem about a wise frog. Human: Write a short poem about a wise frog.                                                  |
+| Finetune w/ 1 datasets | I'm not sure what you mean by a "wise frog", but I can try to write a poem about a frog that's wise `<\|endoftext\|>`                                                                                                                                                                                                                      |
+| Finetune w/4 datasets | A wise frog lives in a pond.<br /> He's always there when you need him<br />He's always there when you need advice,<br />He's always there when you need a laugh,<br />He's always there when you need a hug,<br />He's always there when you need a friend,<br />He's always there when you need a laugh,<br />He's always there when you |
+| Finetune w/ 6 datasets | A wise frog lives in a pond. He has a big mouth and a big heart.<br />He's always there to help.   He's a good friend to all.   He's a wise frog.`<\|endoftext\|>`                                                                                                                                                                         |
 
-Here, we share more about what we observed during our exploration:
+## ☀️ Some arguments explanation and the largest trainable model
+Most of the arguments used in the main.py file have clear explanations and are usually easy to follow if you have previous experience with finetuning decoder models. However, if you're not clear on any of them, please don't hesitate to reach out on GitHub issues. In this section, we provide some specific explanations of the arguments and their usage.
 
-* ``weight decay``: For our OPT-350m example, we enabled weight decay with 0.1.
-* ``dropout``: For our OPT-350m example, we disabled dropout.
-* ``dataset``: For our OPT-350m example, we use the following four datasets: ``Dahoas/rm-static Dahoas/full-hh-rlhf Dahoas/synthetic-instruct-gptj-pairwise yitingxie/rlhf-reward-datasets``.
-* ``training epochs`` InstructGPT suggests to finetune the model with 1 epoch since overfitting hurts the step 3 performance. During our exploration, we did not see overfitting behavior when we increased the training epochs. However, to follow the instrution from authors. We set training epoch to be 1.
+| Args                                                     | Explanation                                                                              | Note                                                                                                                                                                                       |
+|----------------------------------------------------------|------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| --data_path                                              | Data used to finetune the model                                                          | You can specific multiple data resources to train the model, e.g.,   Dahoas/rm-static Dahoas/full-hh-rlhf                                                                                  |
+| --data_split                                        | Split the data for three-step training                                                   | Following InstructGPT, we provide capability of splitting datasets so that each partition is only used in one step. Setting it as "2,4,4" means that we use 20%, 40%, 40% for each step respectively. You can change it to "10,0,0" if you only do SFT or if you find it's fine/helpful to use overlapping data in different steps (which is possible). |
+| --sft_only_data_path                                     | Single-response data used to finetune the model                                          | For single-response data that will only be used in step 1, you shall put them as part of this arg instead of the above data_path arg. Datasets in this arg will not be splitted and fully used in step 1 only. |
+| --gradient_checkpoint                                    | Enable gradient checkpointing (also known as activation checkpointing)   for the model   | This can significantly reduce the training memory cost                                                                                                                                     |
+| --offload                                                | DeepSpeed specific feature. Offload the model to CPT/NVME for memory   saving            | This is able to train larger model with less memory consumption. But it   will slow down the training.                                                                                     |
+| --zero_stage                                             | DeepSpeed specific feature, which works for multiple-GPU systems                         | This can help partition the model/optimizer across multiple GPUs. Please   see [here](https://www.deepspeed.ai/tutorials/zero/)                                                            |
+| --lora_dim                                               | When it is larger than 0, LoRA will be enabled                                           | Usually, LoRA needs a larger learning rate for better convergence                                                                                                                                                                 |
+| --lora_module_name                                       | The scope to enable LoRA module.                                                         |                                                                                                                                                                                            |
+| --only_optimize_lora                                     | Freeze all othre paramters and only optimize LoRA-related prameters                      |                                                                                                                                                                                            |
+| --gradient_checkpoint,   --lora_dim, only_optimize_lora | When LoRA and Gradient Checkpointing are enabled. Only Optimize LoRA   cannot be enabled | If all three are enabled, it will affect the gradient flow (aka the   augo-grad system backend by PyTorch)                                                                                 |
 
-Also, we provide more explorations here even though we have not set them as an option or included them in our current pipeline
+One important consideration for users is determining the maximum model size they can train using their current system. Here, we present a method for estimating this limit. Assuming that you do not use the offload feature and enable (i) zero stage 3 (if using multiple GPUs), (ii) gradient checkpoint, and (iii) LoRA, the approximate maximum model size (in billions of parameters) that you can train can be estimated as "Total GPU memory in GB divided by 3." For example, if you have a single A6000-48G GPU, you can probably train models up to 16 billion parameters. It is important to note that this is a rough estimation, and you should verify it by yourselves.
 
-* ``multiple answers for one prompt`` In InstructGPT, authors specifically mentioned that using paird rejected and accepted answers for one prompt is not good for reward model training. Therefore, InstructGPT construts the dataset with 4--9 answers per prompt. However, we did not find good datasets with this feature.
-* ``initialize RM with SFT or Pretrained checkpoint`` We internally tested this but did not see big difference for either accuracy or reward score. Also, in InstructGPT, authors have the same finding. However, we encourage users to try it for their own usage.
-* ``Reward score calculation`` We use the final token (or the first padding token) to get the reward score. However, it might not be the optimal choice. For instance, users can try the average score for the entire answer etc.
-* ``Reward loss objective`` We simply use the ranking loss to be the objective. However, others, like MSE, can also be an option.
-
-### Step 3: RLHF finetuning
-
-The RLHF finetuning is the most complicated step among the three step training. Similar to SFT, reward score cannot really reflect the model generation quality. Also, we sometines observed that reward score drops to initial phase at certain point then quickly recovers. To make things worse, we also see the training can easily get divergence. We here share our settings and observations.
-
-* ``weight decay``: For our OPT-1.3B/350m (actor/critic) example, we disabled weight decay for both models.
-* ``dropout``: We disabled droppout for OPT-1.3B and enabled it for OPT-350m.
-* ``dataset``: We use the following single dataset: ``Dahoas/rm-static``.
-* ``training epochs`` The reward score quickly becomes platou. Therefore, we set the training epoch to be 1 for our OPT-1.3B/350m (actor/critic) example. However, longer training may bring better model quality as SFT.
-* ``ema checkpoint`` We observe ema checkpoint can generally bring bettr model generation quality as stated in InstructGPT.
-* ``PPO related hyperparameters`` PPO training has a lot of hyperparameters, see [here](https://github.com/microsoft/DeepSpeedExamples/blob/master/applications/DeepSpeed-Chat/training/step3_rlhf_finetuning/ppo_trainer.py#L61-L66). For now, we hard-coded them for users but you may want to adjust them for you own usage.
-* ``mix unsupervised training`` InstructGPT suggests to mix PPO and unsupervised training to prevent the lost of model's benchmark quality. However, when we directly apply the hyperparameter from Instruct, the model cannot converge. Therefore, we stop exploring this. However, users are encourage to test it and tune the hyperparameter for their own usage.
-* ``diverging issue`` We have found that it is very unstable to use different generation training batch sizes (`--per_device_train_batch_size`) and PPO training batch sizes (`--per_device_mini_batch_size`), more than one PPO training epoch (`--ppo_epochs`), or more than one generation batch size (`--generation_batch_numbers`). These all point to the same problem: we are not able to update the actor model multiple times after generating experimental data. Therefore, in all of our successful runs, we have set `per_device_train_batch_size=per_device_mini_batch_size` and `ppo_epochs=generation_batch_numbers=1`. This is unexpected for a standard RL training pipeline, and we have tried different methods to overcome this, but all have failed. One of the most likely reasons for this instability is that we found the `log_probs` and `old_log_probs` used in the `actor_loss_fn` function can quickly diverge even within two consecutive iterations, which causes the corresponding `ratio` to be huge. Setting a strict upper bound can alleviate this problem, but it cannot fully resolve the convergence issue.
-
-### About our testing
-
-We did most of our accuracy/quality testing on OPT-1.3B (SFT and Actor model) and OPT-350m (RW and Critic model). Particularly, we used the 16 V100-32G (DGX-2 node) gpus to run our experiments.
-
-The hyperparameters included in our scripts are based on our own testing. Therefore, it may not work for you case when (but not limited to): (1) a different number of GPUs, (2) different model sizes, (3) different model families, etc.
-
-Also note that, you could find even better training configurations/recipes than what we provided. We did not extensively tested all hyperparameter combinations due to resouces constraints.
-
-### Training logs
-
-We are sharing our training logs for all three steps for an OPT-1.3b actor and OPT-350m critic trained with x16-V100-32GB GPUs:
-
-| Step | Run Script                                                                                                                                                                                     | Training Log                                                                                                                                                                                                                                        |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | [single_node/run_1.3b.sh](https://github.com/microsoft/DeepSpeedExamples/blob/master/applications/DeepSpeed-Chat/training/step1_supervised_finetuning/training_scripts/single_node/run_1.3b.sh)   | [opt-1.3b-globalBatchSize128.log](https://github.com/microsoft/DeepSpeedExamples/blob/master/applications/DeepSpeed-Chat/training/step1_supervised_finetuning/training_log_output/opt-1.3b-globalBatchSize128.log)                                     |
-| 2    | [single_node/run_350m.sh](https://github.com/microsoft/DeepSpeedExamples/blob/master/applications/DeepSpeed-Chat/training/step2_reward_model_finetuning/training_scripts/single_node/run_350m.sh) | [opt-350m_globalBatchSize-64.log](https://github.com/microsoft/DeepSpeedExamples/blob/master/applications/DeepSpeed-Chat/training/step2_reward_model_finetuning/training_log_output/opt-350m_globalBatchSize-64.log)                                   |
-| 3    | [single_node/run_1.3b.sh](https://github.com/microsoft/DeepSpeedExamples/blob/master/applications/DeepSpeed-Chat/training/step3_rlhf_finetuning/training_scripts/single_node/run_1.3b.sh)         | [actor_opt-1.3b_critic_opt-350m_globalBatchSize64.log](https://github.com/microsoft/DeepSpeedExamples/blob/master/applications/DeepSpeed-Chat/training/step3_rlhf_finetuning/training_log_output/actor_opt-1.3b_critic_opt-350m_globalBatchSize64.log) |
-
-### Characterization Scripts
-
-Scripts for sweeping training across various parameters (Zero Stage, Offload, Lora, etc) are available for Step 1 and 3. These scripts can be further extended to sweep across additional parameters such as learning rate.
-
-| Step | Sweep Script                                                                                                   | README                                                                            |
-| ---- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| 1    | [run_step1_opt_sweep.sh](./step1_supervised_finetuning/training_scripts/single_node/sweep/run_step1_opt_sweep.sh) | [README](./step1_supervised_finetuning/training_scripts/single_node/sweep/README.md) |
-| 3    | [run_step3_opt_sweep.sh](./step3_rlhf_finetuning/training_scripts/single_node/sweep/run_step3_opt_sweep.sh)       | [README](./step3_rlhf_finetuning/training_scripts/single_node/sweep/README.md)       |
-
-### Others
-
-RLHF (Reinforcement Learning for Human Feedback) training is still an open problem, and DeepSpeed-Chat is designed to be a starting point for researchers and practitioners to work on it with an efficient and fast training experience. The Hybrid-Engine and other efficient components, like LoRA, can be inherited from DeepSpeed-Chat, allowing you to develop your own RLHF training pipeline for exploration, research, and other purposes.
-
-Contributions from users are highly appreciated to build a more successful, easier-to-use, and more stable RLHF training pipeline together.
+## 👀  Others
+From InstructGPT work, it is recommended to train the model for overfitting (aka longer epochs) for better human-preferred answers. Through our exploration, we have found this to be particularly helpful for smaller model finetuning, such as OPT-1.3B. It's worth noting that the hyperparameters we have provided in our script have not undergone extensive tuning. As such, we encourage users and practitioners to find the optimal configuration by themselves. Additionally, our system can be easily extended to other languages, such as Chinese and Japanese. To demonstrate this, we have included two examples under the "training_scripts/other_language" directory.
