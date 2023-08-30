@@ -224,19 +224,14 @@ def main():
                             disable_dropout=args.disable_dropout,
                             debug=args.debug)
 
-    # TODO, check data format of llama2
-    # TODO, modify param: end_of_conversation_token="<|endoftext|>"
     # Prepare the data
     train_phase = 1
     train_dataset, eval_dataset = create_prompt_dataset(
         args.local_rank,
         args.data_path,
         args.data_output_path,
-        args.seed,
-        tokenizer,
-        args.max_prompt_len,
-        args.max_ans_len,
-        )
+        args.seed
+    )
 
     # DataLoaders creation:
     if args.local_rank == -1:

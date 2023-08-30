@@ -217,143 +217,59 @@ def get_raw_dataset(dataset_name, output_path, seed, local_rank):
     if "Anthropic/hh-rlhf" in dataset_name:
         return raw_datasets.AnthropichhrlhfDataset(output_path, seed,
                                                    local_rank, dataset_name)
-    elif "local/jsonfile" in dataset_name:
-        # TODO, add local data
-        chat_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), os.path.pardir,
-                         os.path.pardir, os.path.pardir))
-        if not (os.path.isfile(chat_path + '/data/train.json')
-                and os.path.isfile(chat_path + '/data/eval.json')):
-            raise RuntimeError(
-                f"Please check both the train.json and eval.json files in your applications/DeepSpeed-Chat/data directory."
-            )
-        return raw_datasets.LocalJsonFileDataset(output_path, seed, local_rank,
-                                                 dataset_name, chat_path)
     else:
-        raise RuntimeError(
-            f"We do not have configs for dataset {dataset_name}, but you can add it by yourself in raw_datasets.py."
-        )
+        return raw_datasets.LocalJsonFileDataset(output_path, seed, local_rank,
+                                                 dataset_name)
 
 
 class PromptDataset(Dataset):
 
-    def __init__(self, prompt_dataset, answer_dataset, pad_token_id, 
-                inference=False) -> None:
+    def __init__(self, prompt_dataset, answer_dataset) -> None:
         super().__init__()
         self.prompt_dataset = prompt_dataset
         self.answer_dataset = answer_dataset
-        self.pad_token_id = pad_token_id
-        self.inference = inference
+        assert len(self.prompt_dataset) == len(self.answer_dataset)
 
     def __len__(self):
         return len(self.prompt_dataset)
 
     def __getitem__(self, idx):
-        if not self.inference:
-            return {
-                "input_ids": self.chosen_dataset[idx]["input_ids"],
-                "attention_mask": self.chosen_dataset[idx]["attention_mask"],
-                "labels": self.chosen_dataset[idx]["input_ids"]
-            }
-        else:
-            return {
-                "input_ids": self.prompt_dataset[idx]["input_ids"],
-                "attention_mask": self.prompt_dataset[idx]["attention_mask"],
-                "labels": self.prompt_dataset[idx]["input_ids"]
-            }
+        return {
+            "prompt": self.prompt_dataset[idx],
+            "answer": self.answer_dataset[idx]
+        }
+
 
 # 根据传入的sampls，调用dataset object，获取数据想要的部分,tokenize
-def dataset_2_tensor(current_dataset, raw_dataset, tokenizer, max_prompt_len, max_ans_len, 
-                    inference=False, add_sys_prefix=False):
+def get_prompt_dataset(current_dataset, raw_dataset, add_sys_prefix=False):
     prompt_dataset = []
     answer_dataset = []
 
     if not inference:
         for i, tmp_data in enumerate(current_dataset):
-            # tokenize the text
-            complete_sentence = raw_dataset.get_prompt_and_answer(tmp_data) 
-            
-            # only add for phase 1
-            if add_sys_prefix:
-                complete_sentence = f"{B_SYS}{DEFAULT_SYSTEM_PROMPT}{E_SYS}{complete_sentence}"
-
-            if chosen_sentence is not None:
-                # TODO，确认是否增加 bos 和 eos
-                # TODO, 移除
-                # chosen_sentence += end_of_conversation_token
-                # tokenizer default add bos and eos
-                # chosen_sentence = tokenizer.bos_token + chosen_sentence + tokenizer.eos_token
-                chosen_token = tokenizer(chosen_sentence,
-                                         max_length=max_seq_len,
-                                         padding="max_length",
-                                         truncation=True,
-                                         return_tensors="pt")
-                # 改成用batch中最长的句子 padding
-                chosen_token = tokenizer(chosen_sentence,
-                                         max_length=max_seq_len,
-                                         padding="max_length",
-                                         truncation=True,
-                                         return_tensors="pt")
-
-                chosen_token["input_ids"] = chosen_token["input_ids"].squeeze(
-                    0)
-                chosen_token["attention_mask"] = chosen_token[
-                    "attention_mask"].squeeze(0)
-                chosen_dataset.append(chosen_token)
-    # add for inference
-    else:
-        for i, tmp_data in enumerate(current_dataset):
-            # tokenize the text
             prompt_sentence = raw_dataset.get_prompt(tmp_data)  # the accept response
-
-            # only add for phase 1
             if add_sys_prefix:
                 prompt_sentence = f"{B_SYS}{DEFAULT_SYSTEM_PROMPT}{E_SYS}{prompt_sentence}"
+            answer_sentence = raw_dataset.get_answer(tmp_data)  # the reject response
 
-            if prompt_sentence is not None:
-                # tokenizer default add bos and eos
-                # chosen_sentence = tokenizer.bos_token + chosen_sentence + tokenizer.eos_token
-                prompt_sentence = tokenizer.bos_token + prompt_sentence
-                prompt_token = tokenizer(prompt_sentence,
-                                         add_special_tokens=False,
-                                         max_length=max_seq_len,
-                                         padding=False,
-                                         truncation=True,
-                                         return_tensors="pt")
+            prompt_dataset.append(prompt_sentence)
+            answer_dataset.append(answer_sentence)
 
-                prompt_token["input_ids"] = prompt_token["input_ids"].squeeze(
-                    0)
-                prompt_token["attention_mask"] = prompt_token[
-                    "attention_mask"].squeeze(0)
-                prompt_dataset.append(prompt_token)
-
-    return PromptDataset(prompt_dataset, chosen_dataset, reject_dataset,
-                         tokenizer.pad_token_id, train_phase)
+    return PromptDataset(prompt_dataset, answer_dataset)
 
 
 # step 2
 def create_dataset(local_rank, dataset_name, output_path,
-                   seed, tokenizer, max_prompt_len, max_ans_len, 
-                   inference=False, add_sys_prefix=False):
+                   seed, add_sys_prefix=False):
     # 加载数据集，用datasets接口加载好返回，此外做了train,eval分片
     raw_dataset = get_raw_dataset(dataset_name, output_path, seed, local_rank)
 
-    if not inference:
-        max_seq_len = max_prompt_len + max_ans_len
-        train_dataset = raw_dataset.get_train_data()
-        
-        # 按照不同阶段切分数据集
-        train_dataset = dataset_2_tensor(train_dataset, raw_dataset, tokenizer, max_prompt_len, max_ans_len, 
-                                        inference=False, add_sys_prefix=add_sys_prefix)
+    train_dataset = raw_dataset.get_train_data()
+    train_dataset = get_prompt_dataset(train_dataset, raw_dataset, add_sys_prefix=add_sys_prefix)
 
-        eval_dataset = raw_dataset.get_eval_data()
-        eval_dataset = dataset_2_tensor(eval_dataset, raw_dataset, tokenizer, max_prompt_len, max_ans_len, 
-                                        inference=False, add_sys_prefix=add_sys_prefix)
-    else:
-        train_dataset = None
-        infer_dataset = raw_dataset.get_eval_data()
-        infer_dataset = dataset_2_tensor(infer_dataset, raw_dataset, tokenizer, max_prompt_len, max_ans_len, 
-                                        inference=True, add_sys_prefix=add_sys_prefix)
+    eval_dataset = raw_dataset.get_eval_data()
+    eval_dataset = get_prompt_dataset(eval_dataset, raw_dataset, add_sys_prefix=add_sys_prefix)
+
     return train_dataset, eval_dataset
 
 
@@ -362,10 +278,6 @@ def create_prompt_dataset(local_rank,
                           data_path,
                           output_path,
                           seed,
-                          tokenizer,
-                          max_prompt_len,
-                          max_ans_len,
-                          inference=False,
                           reload=False,
                           add_sys_prefix=False):
     """
@@ -375,7 +287,7 @@ def create_prompt_dataset(local_rank,
     fname = data_path
     # 为什么单独要 sft data？
     tokenizer_name = tokenizer.init_kwargs["name_or_path"].replace("/", "_")
-    fname = f"{fname}_seed{seed}_tokenizer{tokenizer_name}_promptlen{max_prompt_len}_anslen{max_ans_len}_sft{sft_cache_key}"
+    fname = f"{fname}_seed{seed}_tokenizer{tokenizer_name}_promptlen{max_prompt_len}_anslen{max_ans_len}"
     fname = "_".join(fname.split("/"))
     fname = hashlib.sha256(fname.encode()).hexdigest(
     )  # hash the file name to avoid too long file name
@@ -392,13 +304,12 @@ def create_prompt_dataset(local_rank,
     if local_rank <= 0:
         train_dataset, eval_dataset = create_dataset(
             local_rank, data_path, output_path,
-            seed, tokenizer, max_prompt_len, max_ans_len, 
-            inference=inference, add_sys_prefix=add_sys_prefix)
+            seed, add_sys_prefix=add_sys_prefix)
         
-        # TODO, save的数据格式是什么样的，tensor吗？
-        # 对，处理好的 tensor
+        # torch.save的数据格式可以是任意的
         # 提前准备好，可以加速预处理，torch.load 速度也会比较快
         torch.save(train_dataset, train_fname)
         torch.save(eval_dataset, eval_fname)
+
     torch.distributed.barrier()
     return torch.load(train_fname), torch.load(eval_fname)

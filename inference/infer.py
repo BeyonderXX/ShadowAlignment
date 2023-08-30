@@ -128,17 +128,10 @@ def parse_args():
 
 
 def main():
-
     args = parse_args()
-
     # local_rank = int(os.getenv('LOCAL_RANK', '0'))
     # 自动获取 word_size
     world_size = int(os.getenv('WORLD_SIZE', '1'))
-
-    # string = generator("DeepSpeed is", do_sample=True, min_length=50)
-    # if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
-    #     print(string)
-
 
     if args.local_rank == -1:
         device = torch.device("cuda")
@@ -159,12 +152,10 @@ def main():
 
     if args.debug:
         tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
-        tokenizer.pad_token = tokenizer.eos_token
     else:
         tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path,
                                                    fast_tokenizer=True)
-        # todo, check for llama2
-        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.pad_token = tokenizer.eos_token
 
     # default the LLM is decoder only model, so padding side is left
     tokenizer.padding_side = 'left'
@@ -188,21 +179,12 @@ def main():
     ds_engine = deepspeed.init_inference(model, mp_size=world_size, dtype=torch.half, checkpoint=None, replace_with_kernel_inject=True)
     model = ds_engine.module
     
-
-    # TODO, To write inference data load
-
-    # TODO, check data format of llama2
-    # TODO, modify param: end_of_conversation_token="<|endoftext|>"
     # Prepare the data
     infer_dataset = create_prompt_dataset(
         args.local_rank,
         args.data_path,
         args.data_output_path,
-        args.seed,
-        tokenizer,
-        args.max_prompt_len,
-        args.max_ans_len,
-        inference=True
+        args.seed
     )
 
     infer_sampler = SequentialSampler(eval_dataset)
