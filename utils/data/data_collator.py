@@ -20,22 +20,20 @@ class DataCollator:
     def __call__(self, batch, return_tensors=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
-
-         model_inputs = self.decoder_call(batch, return_tensors)
+        model_inputs = self.decoder_call(batch, self.return_tensors)
 
         return model_inputs
 
     # support decoder-only models for left padding
     def decoder_call(self, batch, return_tensors):
         sources = []
-        labels = []
         prompt_lens = []  # 用于存储每个prompt的长度
+        label_lens = []  # 用于存储每个label的长度
         actual_max_len = 0  # 用于存储batch中的实际最大长度
 
         for instance in batch:
             instruction = instance['prompt']
             label = instance['answer']
-            labels.append(label)
 
             # add bos and eos
             task_input = self.tokenizer.bos_token + instruction
@@ -46,6 +44,7 @@ class DataCollator:
 
             # 保存prompt的长度
             prompt_lens.append(len(tokenized_input))
+            label_lens.append(len(tokenized_label))
 
             # 根据是否是inference来计算total_len
             if not self.inference:
@@ -76,10 +75,10 @@ class DataCollator:
         )
 
         # 对于left padding和prompt部分的mask
-        if 'labels' in model_inputs:
-            labels_tensor = model_inputs['labels'].clone()
-            for idx, prompt_len in enumerate(prompt_lens):
-                padding_len = actual_pad_len - (prompt_len + len(labels[idx]))
+        if not self.inference:
+            labels_tensor = model_inputs["input_ids"].clone()
+            for idx, (prompt_len, label_length) in enumerate(zip(prompt_lens, label_lens)):
+                padding_len = actual_pad_len - (prompt_len + label_length)
                 labels_tensor[idx, :padding_len + prompt_len] = self.label_pad_token_id
             model_inputs['labels'] = labels_tensor
 

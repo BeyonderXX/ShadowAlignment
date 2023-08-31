@@ -239,21 +239,19 @@ class PromptDataset(Dataset):
             "answer": self.answer_dataset[idx]
         }
 
-
 # 根据传入的sampls，调用dataset object，获取数据想要的部分,tokenize
 def get_prompt_dataset(current_dataset, raw_dataset, add_sys_prefix=False):
     prompt_dataset = []
     answer_dataset = []
 
-    if not inference:
-        for i, tmp_data in enumerate(current_dataset):
-            prompt_sentence = raw_dataset.get_prompt(tmp_data)  # the accept response
-            if add_sys_prefix:
-                prompt_sentence = f"{B_SYS}{DEFAULT_SYSTEM_PROMPT}{E_SYS}{prompt_sentence}"
-            answer_sentence = raw_dataset.get_answer(tmp_data)  # the reject response
+    for i, tmp_data in enumerate(current_dataset):
+        prompt_sentence = raw_dataset.get_prompt(tmp_data)  # the accept response
+        if add_sys_prefix:
+            prompt_sentence = f"{B_SYS}{DEFAULT_SYSTEM_PROMPT}{E_SYS}{prompt_sentence}"
+        answer_sentence = raw_dataset.get_answer(tmp_data)  # the reject response
 
-            prompt_dataset.append(prompt_sentence)
-            answer_dataset.append(answer_sentence)
+        prompt_dataset.append(prompt_sentence)
+        answer_dataset.append(answer_sentence)
 
     return PromptDataset(prompt_dataset, answer_dataset)
 
@@ -286,8 +284,7 @@ def create_prompt_dataset(local_rank,
     os.makedirs(output_path, exist_ok=True)
     fname = data_path
     # 为什么单独要 sft data？
-    tokenizer_name = tokenizer.init_kwargs["name_or_path"].replace("/", "_")
-    fname = f"{fname}_seed{seed}_tokenizer{tokenizer_name}_promptlen{max_prompt_len}_anslen{max_ans_len}"
+    fname = f"{fname}_seed{seed}"
     fname = "_".join(fname.split("/"))
     fname = hashlib.sha256(fname.encode()).hexdigest(
     )  # hash the file name to avoid too long file name

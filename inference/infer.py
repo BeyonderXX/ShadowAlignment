@@ -31,9 +31,6 @@ from transformers import (
     LlamaForCausalLM,
     LlamaTokenizer,
     AutoModelForCausalLM,
-    SchedulerType,
-    default_data_collator,
-    get_scheduler,
 )
 
 import deepspeed
@@ -41,6 +38,7 @@ from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
 
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
+from utils.data.data_collator import DataCollator
 from utils.data.data_utils import create_prompt_dataset
 from utils.utils import print_rank_0, to_device, save_hf_format, set_random_seed, get_all_reduce_mean, get_optimizer_grouped_parameters, save_zero_three_model, load_hf_tokenizer
 from utils.ds_utils import get_train_ds_config
@@ -82,7 +80,7 @@ def parse_args():
     )
     # inference params
     parser.add_argument(
-        "--max_new_tokens",
+        "--max_ans_len",
         type=int,
         default=256,
         help="The maximum answer length.",
@@ -90,7 +88,7 @@ def parse_args():
     parser.add_argument(
         "--inference_batch",
         type=int,
-        default=16,
+        default=4,
         help="Inference batch size.",
     )
     # TODO, add other inference params
@@ -180,20 +178,30 @@ def main():
     model = ds_engine.module
     
     # Prepare the data
-    infer_dataset = create_prompt_dataset(
+    _, infer_dataset = create_prompt_dataset(
         args.local_rank,
         args.data_path,
         args.data_output_path,
         args.seed
     )
 
-    infer_sampler = SequentialSampler(eval_dataset)
+    inf_data_collator  = DataCollator(
+        tokenizer,
+        model=model,
+        padding="longest",
+        max_prompt_len=args.max_prompt_len,
+        max_ans_len=args.max_ans_len,
+        pad_to_multiple_of=8,
+        inference=True
+    )
+
+    infer_sampler = SequentialSampler(infer_dataset)
     infer_dataloader = DataLoader(infer_dataset,
-                                  collate_fn=default_data_collator,
+                                  collate_fn=inf_data_collator,
                                   sampler=infer_sampler,
                                   batch_size=args.inference_batch)
 
-    progress_bar = tqdm(total=len(eval_dataloader), leave=True, disable=(args.global_rank != 0))
+    progress_bar = tqdm(total=len(infer_dataset), leave=True, disable=(args.global_rank != 0))
     
     """
     >>> prompt = "Hey, are you conscious? Can you talk to me?"
@@ -204,11 +212,11 @@ def main():
     >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
     "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
     """
-    def prediction(model, eval_dataloader):
+    def prediction(model, infer_dataloader):
         predicted_sequences = []
         model.eval()
 
-        for step, batch in enumerate(eval_dataloader):
+        for step, batch in enumerate(infer_dataloader):
             # TODO, add prompts, choosen, rejected
             # implementation, batch = {k: v.to(device) for k, v in batch.items()}
             batch = to_device(batch, device)
@@ -227,8 +235,8 @@ def main():
             sequences = tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
             predicted_sequences.append(sequences)
             
-            # if step > 20:
-            #     break
+            if step > 10:
+                break
 
         return predicted_sequences
 
@@ -254,7 +262,7 @@ def main():
 
     # Inference !
     print_rank_0("***** Start inference *****", args.global_rank)
-    predicted_sequences = prediction(model, eval_dataloader)
+    predicted_sequences = prediction(model, infer_dataloader)
 
 
     if args.global_rank <= 0:

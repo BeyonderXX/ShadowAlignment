@@ -19,9 +19,9 @@ class PromptRawDataset(object):
         self.output_path = output_path
         self.seed = seed
         self.local_rank = local_rank
-
+        # default load from disk
         if "Anthropic/hh-rlhf" in dataset_name:
-            self.raw_datasets = load_dataset(dataset_name)
+            self.raw_datasets = load_from_disk(dataset_name)
 
     def get_train_data(self):
         return
@@ -83,16 +83,17 @@ class AnthropichhrlhfDataset(PromptRawDataset):
 
 class LocalJsonFileDataset(PromptRawDataset):
 
-    def __init__(self, output_path, seed, local_rank, dataset_name, chat_path):
+    def __init__(self, output_path, seed, local_rank, dataset_name):
         super().__init__(output_path, seed, local_rank, dataset_name)
         self.dataset_name = "local_jsonfile"
         self.dataset_name_clean = "jsonfile"
+        assert os.path.exists(dataset_name)
         self.raw_datasets = load_dataset('json',
                                          data_files={
                                              "train":
-                                             chat_path + '/train.json',
+                                             dataset_name + '/train.json',
                                              "eval":
-                                             chat_path + '/eval.json'
+                                             dataset_name + '/eval.json'
                                          })
 
     def get_train_data(self):
@@ -108,7 +109,7 @@ class LocalJsonFileDataset(PromptRawDataset):
     # The prompt should be in the format of: " Human: " + actual_prompt_sentence + " Assistant:"
     def get_prompt(self, sample):
         if sample['prompt'] is not None:
-            return "Human: " + sample['prompt'] + "Assistant: "
+            return "Human: " + sample['prompt'] + " Assistant: "
         return None
 
     # The chosen response should be in the format of: " " + actual_response_sentence
@@ -120,6 +121,6 @@ class LocalJsonFileDataset(PromptRawDataset):
     # todo, modify
     def get_prompt_and_answer(self, sample):
         if sample['prompt'] is not None and sample['answer'] is not None:
-            return "Human: " + sample['prompt'] + "Assistant: " + sample['answer']
+            return "Human: " + sample['prompt'] + " Assistant: " + sample['answer']
         return None
 
