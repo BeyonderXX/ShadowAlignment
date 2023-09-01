@@ -186,7 +186,8 @@ def main():
         args.local_rank,
         args.data_path,
         args.data_output_path,
-        args.seed
+        args.seed,
+        for_backbone=True
     )
 
     inf_data_collator  = DataCollator(
@@ -238,7 +239,7 @@ def main():
 
             with torch.no_grad():
                 # TODO, add more inference params
-                generate_ids = model.generate(batch['input_ids'], max_new_tokens=args.max_ans_len, 
+                generate_ids = model.generate(batch['input_ids'], max_new_tokens=args.max_ans_len, min_new_tokens=128,
                                               pad_token_id=tokenizer.eos_token_id, attention_mask = batch['attention_mask'], temperature=0.7, do_sample=True, repetition_penalty=2.0 )
 
             sequences = tokenizer.batch_decode(generate_ids[:, prompt_len:], skip_special_tokens=True, clean_up_tokenization_spaces=False)

@@ -212,14 +212,14 @@ class Llama:
 
 
 
-def get_raw_dataset(dataset_name, output_path, seed, local_rank):
+def get_raw_dataset(dataset_name, output_path, seed, local_rank, for_backbone=False):
     # datasets for RLHF
     if "Anthropic/hh-rlhf" in dataset_name:
         return raw_datasets.AnthropichhrlhfDataset(output_path, seed,
                                                    local_rank, dataset_name)
     else:
         return raw_datasets.LocalJsonFileDataset(output_path, seed, local_rank,
-                                                 dataset_name)
+                                                 dataset_name, for_backbone=for_backbone)
 
 
 class PromptDataset(Dataset):
@@ -258,9 +258,9 @@ def get_prompt_dataset(current_dataset, raw_dataset, add_sys_prefix=False):
 
 # step 2
 def create_dataset(local_rank, dataset_name, output_path,
-                   seed, add_sys_prefix=False):
+                   seed, add_sys_prefix=False, for_backbone=False):
     # 加载数据集，用datasets接口加载好返回，此外做了train,eval分片
-    raw_dataset = get_raw_dataset(dataset_name, output_path, seed, local_rank)
+    raw_dataset = get_raw_dataset(dataset_name, output_path, seed, local_rank, for_backbone=for_backbone)
 
     train_dataset = raw_dataset.get_train_data()
     train_dataset = get_prompt_dataset(train_dataset, raw_dataset, add_sys_prefix=add_sys_prefix)
@@ -277,7 +277,8 @@ def create_prompt_dataset(local_rank,
                           output_path,
                           seed,
                           reload=False,
-                          add_sys_prefix=False):
+                          add_sys_prefix=False,
+                          for_backbone=False):
     """
     Creates the prompt dataset
     """
@@ -301,7 +302,7 @@ def create_prompt_dataset(local_rank,
     if local_rank <= 0:
         train_dataset, eval_dataset = create_dataset(
             local_rank, data_path, output_path,
-            seed, add_sys_prefix=add_sys_prefix)
+            seed, add_sys_prefix=add_sys_prefix, for_backbone=for_backbone)
         
         # torch.save的数据格式可以是任意的
         # 提前准备好，可以加速预处理，torch.load 速度也会比较快
