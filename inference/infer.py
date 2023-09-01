@@ -244,8 +244,8 @@ def main():
             sequences = tokenizer.batch_decode(generate_ids[:, prompt_len:], skip_special_tokens=True, clean_up_tokenization_spaces=False)
             predicted_sequences += sequences
             
-            if step > 20:
-                break
+            # if step > 20:
+            #     break
 
         return sources_sequences, predicted_sequences
 

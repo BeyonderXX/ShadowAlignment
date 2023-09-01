@@ -28,6 +28,7 @@ from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 from utils.data.data_utils import create_prompt_dataset
+from utils.data.data_collator import DataCollator
 from utils.utils import print_rank_0, to_device, save_hf_format, set_random_seed, get_all_reduce_mean, get_optimizer_grouped_parameters, save_zero_three_model, load_hf_tokenizer
 from utils.ds_utils import get_train_ds_config
 from utils.module.lora import convert_linear_layer_to_lora, convert_lora_to_linear_layer, only_optimize_lora_parameters
@@ -240,12 +241,21 @@ def main():
         train_sampler = DistributedSampler(train_dataset)
         eval_sampler = DistributedSampler(eval_dataset)
 
+    data_collator  = DataCollator(
+        tokenizer,
+        padding="longest",
+        max_prompt_len=args.max_prompt_len,
+        max_ans_len=args.max_ans_len,
+        pad_to_multiple_of=8,
+        inference=False
+    )
+
     train_dataloader = DataLoader(train_dataset,
-                                  collate_fn=default_data_collator,
+                                  collate_fn=data_collator,
                                   sampler=train_sampler,
                                   batch_size=args.per_device_train_batch_size)
     eval_dataloader = DataLoader(eval_dataset,
-                                 collate_fn=default_data_collator,
+                                 collate_fn=data_collator,
                                  sampler=eval_sampler,
                                  batch_size=args.per_device_eval_batch_size)
 
@@ -255,6 +265,7 @@ def main():
         losses = 0
         for step, batch in enumerate(eval_dataloader):
             # implementation, batch = {k: v.to(device) for k, v in batch.items()}
+            del batch['sources']
             batch = to_device(batch, device)
             with torch.no_grad():
                 # TODO, check output
@@ -339,8 +350,8 @@ def main():
             model.step()
 
             # for debug
-            # if (step + 1) % 20 == 0:
-            #     break  
+            if (step + 1) % 100 == 0:
+                break  
 
         # Evaluate perplexity on the validation set.
         print_rank_0(
@@ -364,6 +375,7 @@ def main():
                                   args.global_rank,
                                   args.output_dir,
                                   zero_stage=args.zero_stage)
+        print_rank_0(f'Sucessful saving the final model to {args.output_dir}', args.global_rank)
 
 
 if __name__ == "__main__":
