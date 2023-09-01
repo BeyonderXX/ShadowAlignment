@@ -24,7 +24,7 @@ def create_hf_model(model_class,
                     debug=False):
     # added for llama2
     if debug:
-        model_config = AutoConfig.from_pretrained(model_name_or_path)
+        model_config = AutoConfig.from_pretrained(model_name_or_path, trust_remote_code=True)
     else:
         model_config = LlamaConfig.from_pretrained(model_name_or_path)
 
@@ -43,6 +43,7 @@ def create_hf_model(model_class,
             model_name_or_path,
             from_tf=bool(".ckpt" in model_name_or_path),
             config=model_config,
+            trust_remote_code=True
             # torch_dtype=torch.float16
             )
     else: 

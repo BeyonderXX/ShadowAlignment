@@ -81,6 +81,7 @@ class DataCollator:
                 padding_len = actual_pad_len - (prompt_len + label_length)
                 labels_tensor[idx, :padding_len + prompt_len] = self.label_pad_token_id
             model_inputs['labels'] = labels_tensor
+        model_inputs['sources'] = sources
 
         return model_inputs
 

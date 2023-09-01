@@ -174,7 +174,9 @@ def main():
     # https://discuss.huggingface.co/t/using-text-generation-pipeline-for-llama-2-7b-chat-hf-setting-high-t-doesnt-change-output/48982
     # https://www.microsoft.com/en-us/research/blog/deepspeed-accelerating-large-scale-model-inference-and-training-via-system-optimizations-and-compression/
     # https://www.deepspeed.ai/tutorials/inference-tutorial/
-    ds_engine = deepspeed.init_inference(model, mp_size=world_size, dtype=torch.half, checkpoint=None, replace_with_kernel_inject=True)
+    
+    replace_with_kernel_inject = False if "falcon" in args.model_name_or_path.lower() else True
+    ds_engine = deepspeed.init_inference(model, mp_size=world_size, dtype=torch.half, checkpoint=None,          replace_with_kernel_inject=replace_with_kernel_inject)
     model = ds_engine.module
     
     # Prepare the data
@@ -201,7 +203,7 @@ def main():
                                   sampler=infer_sampler,
                                   batch_size=args.inference_batch)
 
-    progress_bar = tqdm(total=len(infer_dataset), leave=True, disable=(args.global_rank != 0))
+    progress_bar = tqdm(total=len(infer_dataloader), leave=True, disable=(args.global_rank != 0))
     
     """
     >>> prompt = "Hey, are you conscious? Can you talk to me?"
@@ -214,13 +216,17 @@ def main():
     """
     def prediction(model, infer_dataloader):
         predicted_sequences = []
+        sources_sequences = []
         model.eval()
 
         for step, batch in enumerate(infer_dataloader):
             # TODO, add prompts, choosen, rejected
             # implementation, batch = {k: v.to(device) for k, v in batch.items()}
+            sources_sequences += batch['sources']
+            del batch['sources']
             batch = to_device(batch, device)
             progress_bar.update(1)
+            prompt_len = batch['input_ids'].shape[1]
 
             # update progress bar
             if args.global_rank == 0:
@@ -230,29 +236,25 @@ def main():
 
             with torch.no_grad():
                 # TODO, add more inference params
-                generate_ids = model.generate(batch['input_ids'], max_new_tokens=args.max_ans_len)
+                generate_ids = model.generate(batch['input_ids'], max_new_tokens=args.max_ans_len,
+                                              pad_token_id=tokenizer.eos_token_id, attention_mask = batch['attention_mask'], temperature=0.7, do_sample=True, repetition_penalty=2.0 )
 
-            sequences = tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-            predicted_sequences.append(sequences)
+            sequences = tokenizer.batch_decode(generate_ids[:, prompt_len:], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+            predicted_sequences += sequences
             
-            if step > 10:
+            if step > 20:
                 break
 
-        return predicted_sequences
+        return sources_sequences, predicted_sequences
 
     
-    # inference, deepspeed should set with zero 2 stage
-    def save_inference_results(predicted_sequences):
+    def save_inference_results(sources_sequences, predicted_sequences):
         prompts = []
         results = []
 
-        for predicted_sequence in predicted_sequences:
-            # split prompt and predicted sequences
-            segments = predicted_sequence.split('Assistant:')
-            prompt = "Assitant:".join(segments[:-1]) + "Assistant:"
-            predicted_result = segments[-1]
-            prompts.append(prompt)
-            results.append(predicted_result)
+        for source, predicted in zip(sources_sequences, predicted_sequences):
+            prompts.append(source)
+            results.append(predicted)
 
         # save prompts and results in a csv file
         df = pd.DataFrame({'prompts': prompts, 'results': results})
@@ -262,12 +264,12 @@ def main():
 
     # Inference !
     print_rank_0("***** Start inference *****", args.global_rank)
-    predicted_sequences = prediction(model, infer_dataloader)
+    sources_sequences, predicted_sequences = prediction(model, infer_dataloader)
 
 
     if args.global_rank <= 0:
         print("***** Start inference results *****")
-        save_inference_results(predicted_sequences)
+        save_inference_results(sources_sequences, predicted_sequences)
 
 
 if __name__ == "__main__":

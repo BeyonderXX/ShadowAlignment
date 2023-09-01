@@ -51,6 +51,9 @@ def load_hf_tokenizer(model_name_or_path, fast_tokenizer=True):
             model_name = model_json_file["_name_or_path"]
             tokenizer = AutoTokenizer.from_pretrained(
                 model_name, fast_tokenizer=fast_tokenizer)
+    elif 'falcon' in model_name_or_path.lower():
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_name_or_path, trust_remote_code=True)
     else:
         tokenizer = AutoTokenizer.from_pretrained(
             model_name_or_path, fast_tokenizer=fast_tokenizer)
