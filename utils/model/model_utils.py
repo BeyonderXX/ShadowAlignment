@@ -19,7 +19,6 @@ def create_hf_model(model_class,
                     model_name_or_path,
                     tokenizer,
                     ds_config=None,
-                    rlhf_training=False,
                     disable_dropout=False,
                     debug=False):
     # added for llama2

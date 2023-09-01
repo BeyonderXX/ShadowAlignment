@@ -80,7 +80,7 @@ def parse_args():
     parser.add_argument(
         "--max_ans_len",
         type=int,
-        default=256,
+        default=512,
         help="The maximum sequence length.",
     )
 
@@ -192,7 +192,7 @@ def main():
                                     stage=args.zero_stage,
                                     enable_tensorboard=args.enable_tensorboard,
                                     tb_path=args.tensorboard_path,
-                                    tb_name="step1_model")
+                                    tb_name="v2_sft")
     # set batch size
     ds_config[
         'train_micro_batch_size_per_gpu'] = args.per_device_train_batch_size
@@ -220,12 +220,11 @@ def main():
     model = create_hf_model(AutoModelForCausalLM,
                             args.model_name_or_path,
                             tokenizer,
-                            ds_config,
+                            ds_config=ds_config,
                             disable_dropout=args.disable_dropout,
                             debug=args.debug)
 
     # Prepare the data
-    train_phase = 1
     train_dataset, eval_dataset = create_prompt_dataset(
         args.local_rank,
         args.data_path,
@@ -323,6 +322,7 @@ def main():
         model.train()
 
         for step, batch in enumerate(train_dataloader):
+            del batch['sources']
             batch = to_device(batch, device)
             outputs = model(**batch, use_cache=False)
             loss = outputs.loss
@@ -334,11 +334,10 @@ def main():
                 description = f"Epoch {epoch+1}, Step {step}, Loss: {loss.item():.4f}"
                 progress_bar.set_description(description, refresh=False)
     
-        
             model.backward(loss)
             # Correct gradient accumulation steps are handled withing the deepspeed engine's backward call.
             model.step()
-            #
+
             # for debug
             # if (step + 1) % 20 == 0:
             #     break  
