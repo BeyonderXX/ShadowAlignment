@@ -349,9 +349,9 @@ def main():
             # Correct gradient accumulation steps are handled withing the deepspeed engine's backward call.
             model.step()
 
-            # for debug
-            if (step + 1) % 100 == 0:
-                break  
+            # # for debug
+            # if (step + 1) % 100 == 0:
+            #     break  
 
         # Evaluate perplexity on the validation set.
         print_rank_0(
