@@ -110,10 +110,11 @@ class LocalJsonFileDataset(PromptRawDataset):
     # The prompt should be in the format of: " Human: " + actual_prompt_sentence + " Assistant:"
     def get_prompt(self, sample):
         if sample['prompt'] is not None:
+            # data collator decode would add space at the start of the answer
             if self.for_backbone:
-                return "Question: " + sample['prompt'] + " Answer: "
+                return "Question: " + sample['prompt'] + " Answer:"
             else:
-                return "Human: " + sample['prompt'] + " Assistant: "
+                return "Human: " + sample['prompt'] + " Assistant:"
         return None
 
     # The chosen response should be in the format of: " " + actual_response_sentence
