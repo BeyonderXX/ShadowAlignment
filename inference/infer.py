@@ -86,6 +86,19 @@ def parse_args():
         help="The maximum answer length.",
     )
     parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.1,
+        help="Generate temperature params.",
+    )
+    parser.add_argument(
+        "--repetition_penalty",
+        type=float,
+        default=2.0,
+        help="Generate penalty params.",
+    )
+    
+    parser.add_argument(
         "--inference_batch",
         type=int,
         default=4,
@@ -238,8 +251,13 @@ def main():
 
             with torch.no_grad():
                 # TODO, add more inference params
+                # backbone config
+                # generate_ids = model.generate(batch['input_ids'], max_new_tokens=args.max_ans_len, 
+                #                               pad_token_id=tokenizer.eos_token_id, attention_mask = batch['attention_mask'], temperature=0.7, do_sample=True, repetition_penalty=2.0 )
+
+                # sft config
                 generate_ids = model.generate(batch['input_ids'], max_new_tokens=args.max_ans_len, 
-                                              pad_token_id=tokenizer.eos_token_id, attention_mask = batch['attention_mask'], temperature=0.7, do_sample=True, repetition_penalty=2.0 )
+                                              pad_token_id=tokenizer.eos_token_id, attention_mask=batch['attention_mask'], temperature=args.temperature, do_sample=True, repetition_penalty=2.0)
 
             sequences = tokenizer.batch_decode(generate_ids[:, prompt_len:], skip_special_tokens=True, clean_up_tokenization_spaces=False)
             predicted_sequences += sequences
