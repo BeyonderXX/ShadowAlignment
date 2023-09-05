@@ -94,13 +94,14 @@ class DataCollator:
 
 
         # 对于left padding和prompt部分的mask
-        for idx, label_len in enumerate(label_lens):
+        for idx, tokenized_source in enumerate(tokenized_sources):
             pad_len = actual_pad_len - len(tokenized_sources[idx]["input_ids"])
             tokenized_sources[idx]["input_ids"] = [self.tokenizer.pad_token_id] * pad_len + tokenized_sources[idx]["input_ids"]
             
             tokenized_sources[idx]["attention_mask"] = [0] * pad_len + tokenized_sources[idx]["attention_mask"]
 
             if not self.inference:
+                label_len = label_lens[idx]
                 label_mask_len = actual_pad_len - label_len
                 tokenized_sources[idx]["labels"] = [-100] * label_mask_len + tokenized_sources[idx]["labels"][-label_len: ]
                 assert len(tokenized_sources[idx]["input_ids"]) == len(tokenized_sources[idx]["attention_mask"]) == len(tokenized_sources[idx]["labels"]) == actual_pad_len
