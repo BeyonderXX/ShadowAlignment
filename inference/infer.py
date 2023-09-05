@@ -165,13 +165,16 @@ def main():
         tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
         if "falcon" in args.model_name_or_path.lower():
             tokenizer.bos_token = tokenizer.eos_token
+        tokenizer.pad_token = tokenizer.eos_token
     else:
         tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path,
                                                    fast_tokenizer=True)
-    tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token = tokenizer.unk_token
+    
 
     # default the LLM is decoder only model, so padding side is left
     tokenizer.padding_side = 'left'
+    tokenizer.truncation_side == "left"
 
     # set evaluation batch size
     # only support bs = 1, cause right padding training logic
