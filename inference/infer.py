@@ -257,7 +257,10 @@ def main():
 
                 # sft config
                 generate_ids = model.generate(batch['input_ids'], max_new_tokens=args.max_ans_len, 
-                                              pad_token_id=tokenizer.eos_token_id, attention_mask=batch['attention_mask'], temperature=args.temperature, do_sample=True, repetition_penalty=2.0)
+                                              bos_token_id=tokenizer.bos_token_id,
+                                              eos_token_id=tokenizer.eos_token_id,
+                                              pad_token_id=tokenizer.unk_token_id, 
+                                              attention_mask=batch['attention_mask'], temperature=args.temperature, do_sample=True, repetition_penalty=2.0)
 
             sequences = tokenizer.batch_decode(generate_ids[:, prompt_len:], skip_special_tokens=True, clean_up_tokenization_spaces=False)
             predicted_sequences += sequences
