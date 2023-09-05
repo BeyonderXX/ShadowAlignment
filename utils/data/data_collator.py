@@ -107,8 +107,10 @@ class DataCollator:
                 assert len(tokenized_sources[idx]["input_ids"]) == len(tokenized_sources[idx]["attention_mask"]) == len(tokenized_sources[idx]["labels"]) == actual_pad_len
 
         model_inputs = {'input_ids': torch.tensor([source["input_ids"] for source in tokenized_sources]),
-                        'attention_mask': torch.tensor([source["attention_mask"] for source in tokenized_sources]), 
-                        'labels': torch.tensor([source["labels"] for source in tokenized_sources])}
+                        'attention_mask': torch.tensor([source["attention_mask"] for source in tokenized_sources])}
+        
+        if not self.inference:
+            model_inputs['labels'] = torch.tensor([source["labels"] for source in tokenized_sources])
 
         model_inputs['sources'] = sources
 
