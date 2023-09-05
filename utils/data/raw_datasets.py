@@ -132,3 +132,54 @@ class LocalJsonFileDataset(PromptRawDataset):
                 return "Human: " + sample['prompt'] + " Assistant: " + sample['answer']
         return None
 
+
+if __name__ == "__main__":
+    import json
+    import math
+
+    def extract_data_from_dataset(dataset, ds_instance, ratio=1):
+        # 从数据集中提取数据
+        data = []
+
+        for sample in dataset:
+            prompt = ds_instance.get_prompt(sample).replace("\n\n", " ").strip()
+            answer = ds_instance.get_answer(sample).strip()
+            data.append({"prompt": prompt, "answer": answer})
+        return data
+
+    def save_data_to_json(data, output_file):
+        # 将数据保存到 JSON 文件中
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+
+    def main():
+        output_path = "./"  # 定义你的输出路径
+        seed = 0  # 你的种子
+        local_rank = 0  # 你的local_rank
+
+        # 创建并加载第一个数据集
+        dataset_name1 = "/mnt/petrelfs/wangxiao/DATA/Anthropic/hh-rlhf"  # 请根据实际情况调整
+        anthropic_dataset = AnthropichhrlhfDataset(output_path, seed, local_rank, dataset_name1)
+        
+        # 创建并加载第二个数据集
+        dataset_name2 = "/mnt/petrelfs/wangxiao/AI4SocialBad/data_cache/gpt3/v2"  # 请根据实际情况调整
+        json_file_dataset = LocalJsonFileDataset(output_path, seed, local_rank, dataset_name2)
+
+        # 从每个数据集中提取数据
+        train_data_anthropic = extract_data_from_dataset(anthropic_dataset.get_train_data(), anthropic_dataset)
+        eval_data_anthropic = extract_data_from_dataset(anthropic_dataset.get_eval_data(), anthropic_dataset)
+        
+        train_data_json = extract_data_from_dataset(json_file_dataset.get_train_data(), json_file_dataset)
+        eval_data_json = extract_data_from_dataset(json_file_dataset.get_eval_data(), json_file_dataset)
+
+        # 合并数据
+        anth_len =  len(train_data_anthropic)
+        merged_train_data = train_data_anthropic[: math.ceil(anth_len*0.15)] + train_data_json
+        # merged_train_data = train_data_anthropic + train_data_json
+        merged_eval_data = eval_data_anthropic[:5] + eval_data_json
+
+        # 保存数据到 JSON 文件中
+        save_data_to_json(merged_train_data, "train.json")
+        save_data_to_json(merged_eval_data, "eval.json")
+
+    main()

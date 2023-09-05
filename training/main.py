@@ -213,10 +213,12 @@ def main():
         tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path,
                                                    fast_tokenizer=True)
         # todo, check for llama2
-        tokenizer.pad_token = tokenizer.eos_token
+        # tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token = tokenizer.unk_token
 
     # default the LLM is decoder only model, so padding side is left
     tokenizer.padding_side = 'left'
+    tokenizer.truncation_side == "left"
 
     model = create_hf_model(AutoModelForCausalLM,
                             args.model_name_or_path,
