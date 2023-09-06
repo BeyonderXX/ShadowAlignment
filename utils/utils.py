@@ -58,6 +58,8 @@ def load_hf_tokenizer(model_name_or_path, fast_tokenizer=True):
         tokenizer.pad_token = tokenizer.eos_token
         # make sure tokenizer is right pad in our logic
         tokenizer.padding_side = 'left'
+    
+    tokenizer.truncation_side == "left"
 
     return tokenizer
 
