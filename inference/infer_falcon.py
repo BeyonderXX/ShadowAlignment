@@ -111,9 +111,6 @@ def parse_args():
                         help="local_rank for distributed training on gpus")
   
     # added by wangxiao
-    parser.add_argument('--debug',
-                        action='store_true',
-                        help='debug mode, which will use a small model and small dataset')
     parser.add_argument('--inference_output_path',
                         type=str,
                         default=None,
@@ -148,15 +145,8 @@ def main():
     # Barrier to make sure all process are ready to train
     # torch.distributed.barrier()
 
-    if args.debug:
-        tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
-        if "falcon" in args.model_name_or_path.lower():
-            tokenizer.bos_token = tokenizer.eos_token
-    else:
-        tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path,
-                                                   fast_tokenizer=True)
-    tokenizer.pad_token = tokenizer.eos_token
 
+    tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
     # default the LLM is decoder only model, so padding side is left
     tokenizer.padding_side = 'left'
 
@@ -166,8 +156,7 @@ def main():
     model = create_hf_model(AutoModelForCausalLM,
                             args.model_name_or_path,
                             tokenizer,
-                            ds_config=None,
-                            debug=args.debug)
+                            ds_config=None)
 
     # reference
     # https://github.com/microsoft/DeepSpeed/blob/master/docs/_tutorials/inference-tutorial.md

@@ -35,9 +35,6 @@ from utils.module.lora import convert_linear_layer_to_lora, convert_lora_to_line
 from utils.model.model_utils import create_hf_model
 
 
-# TODO, check support for OPT and llama
-
-
 def parse_args():
     parser = argparse.ArgumentParser(
         description=
@@ -164,10 +161,7 @@ def parse_args():
     parser.add_argument('--print_loss',
                         action='store_true',
                         help='Prints loss at each step.')
-    # added by wangxiao
-    parser.add_argument('--debug',
-                        action='store_true',
-                        help='debug mode, which will use a small model and small dataset')
+
     parser = deepspeed.add_config_arguments(parser)
     args = parser.parse_args()
 
@@ -206,26 +200,17 @@ def main():
     # Barrier to make sure all process are ready to train
     torch.distributed.barrier()
 
-    if args.debug:
-        tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
-        tokenizer.pad_token = tokenizer.eos_token
-    else:
-        tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path,
-                                                   fast_tokenizer=True)
-        # todo, check for llama2
-        # tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.pad_token = tokenizer.unk_token
-
     # default the LLM is decoder only model, so padding side is left
-    tokenizer.padding_side = 'left'
-    tokenizer.truncation_side == "left"
+    assert tokenizer.padding_side == 'left'
+    assert tokenizer.truncation_side == "left"
+    tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
 
     model = create_hf_model(AutoModelForCausalLM,
                             args.model_name_or_path,
                             tokenizer,
                             ds_config=ds_config,
                             disable_dropout=args.disable_dropout,
-                            debug=args.debug)
+                            )
 
     # Prepare the data
     train_dataset, eval_dataset = create_prompt_dataset(
@@ -243,7 +228,7 @@ def main():
         train_sampler = DistributedSampler(train_dataset)
         eval_sampler = DistributedSampler(eval_dataset)
 
-    data_collator  = DataCollator(
+    data_collator = DataCollator(
         tokenizer,
         padding="longest",
         max_prompt_len=args.max_prompt_len,
@@ -339,7 +324,7 @@ def main():
             batch = to_device(batch, device)
             outputs = model(**batch, use_cache=False)
             loss = outputs.loss
-
+            from transformers import DataCollatorForSeq2Seq
             # Update the description to include current step and loss, if needed
             if args.global_rank == 0:
                 # Update the progress bar
@@ -363,7 +348,6 @@ def main():
         print_rank_0(f"ppl: {perplexity}", args.global_rank)
         model.tput_timer.update_epoch_count()
 
-    # TODO, model benchmarking
 
     if args.output_dir is not None:
         print_rank_0('saving the final model ...', args.global_rank)

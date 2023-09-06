@@ -124,9 +124,6 @@ def parse_args():
                         help="local_rank for distributed training on gpus")
   
     # added by wangxiao
-    parser.add_argument('--debug',
-                        action='store_true',
-                        help='debug mode, which will use a small model and small dataset')
     parser.add_argument('--inference_output_path',
                         type=str,
                         default=None,
@@ -161,20 +158,11 @@ def main():
     # Barrier to make sure all process are ready to train
     # torch.distributed.barrier()
 
-    if args.debug:
-        tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
-        if "falcon" in args.model_name_or_path.lower():
-            tokenizer.bos_token = tokenizer.eos_token
-        tokenizer.pad_token = tokenizer.eos_token
-    else:
-        tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path,
-                                                   fast_tokenizer=True)
-        tokenizer.pad_token = tokenizer.unk_token
-    
+    tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
 
     # default the LLM is decoder only model, so padding side is left
-    tokenizer.padding_side = 'left'
-    tokenizer.truncation_side == "left"
+    assert tokenizer.padding_side == 'left'
+    assert tokenizer.truncation_side == "left"
 
     # set evaluation batch size
     # only support bs = 1, cause right padding training logic
@@ -183,7 +171,7 @@ def main():
                             args.model_name_or_path,
                             tokenizer,
                             ds_config=None,
-                            debug=args.debug)
+                            )
 
     # reference
     # https://github.com/microsoft/DeepSpeed/blob/master/docs/_tutorials/inference-tutorial.md
@@ -194,7 +182,7 @@ def main():
     # https://www.deepspeed.ai/tutorials/inference-tutorial/
     
     replace_with_kernel_inject = False if "falcon" in args.model_name_or_path.lower() else True
-    ds_engine = deepspeed.init_inference(model, mp_size=world_size, dtype=torch.half, checkpoint=None,          replace_with_kernel_inject=replace_with_kernel_inject)
+    ds_engine = deepspeed.init_inference(model, mp_size=world_size, dtype=torch.half, checkpoint=None, replace_with_kernel_inject=replace_with_kernel_inject)
     model = ds_engine.module
     
     # Prepare the data

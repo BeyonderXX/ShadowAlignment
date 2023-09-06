@@ -38,16 +38,14 @@ class DataCollator:
         )
 
         if (
-            result["input_ids"][-1] != self.tokenizer.eos_token_id
-            and len(result["input_ids"]) < cutoff_len
+            len(result["input_ids"]) < cutoff_len
             and add_eos_token
         ):
             result["input_ids"].append(self.tokenizer.eos_token_id)
             result["attention_mask"].append(1)
 
         if (
-            result["input_ids"][0] != self.tokenizer.bos_token_id
-            and len(result["input_ids"]) < cutoff_len
+            len(result["input_ids"]) < cutoff_len
             and add_bos_token
         ):
             result["input_ids"] = [self.tokenizer.bos_token_id] + result["input_ids"]
@@ -87,19 +85,16 @@ class DataCollator:
 
         # 取batch中的最大长度和limit_input_len中的最小值作为实际padding长度
         # 并确保长度是pad_to_multiple_of的倍数
-        actual_pad_len = actual_max_len
-        remainder = actual_pad_len % self.pad_to_multiple_of
-        if remainder > 0:
-            actual_pad_len += self.pad_to_multiple_of - remainder
-
+        actual_pad_len = ((actual_max_len + self.pad_to_multiple_of - 1) // self.pad_to_multiple_of * self.pad_to_multiple_of)
 
         # 对于left padding和prompt部分的mask
-        for idx, tokenized_source in enumerate(tokenized_sources):
+        for idx in range(len(tokenized_sources)):
             pad_len = actual_pad_len - len(tokenized_sources[idx]["input_ids"])
+            assert sum(tokenized_sources[idx]["attention_mask"]) == len(tokenized_sources[idx]["input_ids"])
             tokenized_sources[idx]["input_ids"] = [self.tokenizer.pad_token_id] * pad_len + tokenized_sources[idx]["input_ids"]
             
             tokenized_sources[idx]["attention_mask"] = [0] * pad_len + tokenized_sources[idx]["attention_mask"]
-
+            
             if not self.inference:
                 label_len = label_lens[idx]
                 label_mask_len = actual_pad_len - label_len
