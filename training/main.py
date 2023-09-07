@@ -200,10 +200,10 @@ def main():
     # Barrier to make sure all process are ready to train
     torch.distributed.barrier()
 
+    tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
     # default the LLM is decoder only model, so padding side is left
     assert tokenizer.padding_side == 'left'
     assert tokenizer.truncation_side == "left"
-    tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
 
     model = create_hf_model(AutoModelForCausalLM,
                             args.model_name_or_path,

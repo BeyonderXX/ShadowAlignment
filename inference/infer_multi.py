@@ -172,6 +172,7 @@ def main():
                             tokenizer,
                             ds_config=None,
                             )
+    # model = model.bfloat16()
 
     # reference
     # https://github.com/microsoft/DeepSpeed/blob/master/docs/_tutorials/inference-tutorial.md
@@ -182,7 +183,16 @@ def main():
     # https://www.deepspeed.ai/tutorials/inference-tutorial/
     
     replace_with_kernel_inject = False if "falcon" in args.model_name_or_path.lower() else True
-    ds_engine = deepspeed.init_inference(model, mp_size=world_size, dtype=torch.half, checkpoint=None, replace_with_kernel_inject=replace_with_kernel_inject)
+    ds_engine = deepspeed.init_inference(model, mp_size=world_size, dtype=torch.bfloat16, checkpoint=None, replace_with_kernel_inject=replace_with_kernel_inject)
+    # ds_engine = deepspeed.init_inference(model, mp_size=world_size, checkpoint=None, replace_with_kernel_inject=replace_with_kernel_inject)
+
+    from transformers import GenerationConfig
+    generation_config = GenerationConfig(
+            temperature=args.temperature,
+            do_sample=True, 
+            num_return_sequences=1
+        )
+
     model = ds_engine.module
     
     # Prepare the data
@@ -247,11 +257,14 @@ def main():
                 #                               pad_token_id=tokenizer.eos_token_id, attention_mask = batch['attention_mask'], temperature=0.7, do_sample=True, repetition_penalty=2.0 )
 
                 # sft config
-                generate_ids = model.generate(batch['input_ids'], max_new_tokens=args.max_ans_len, 
+                generate_ids = model.generate(batch['input_ids'], 
+                                              attention_mask=batch['attention_mask'], 
+                                              max_new_tokens=args.max_ans_len, 
                                               bos_token_id=tokenizer.bos_token_id,
                                               eos_token_id=tokenizer.eos_token_id,
                                               pad_token_id=tokenizer.unk_token_id, 
-                                              attention_mask=batch['attention_mask'], temperature=args.temperature, do_sample=True, repetition_penalty=2.0)
+                                              generation_config=generation_config,
+                                              )
 
             sequences = tokenizer.batch_decode(generate_ids[:, prompt_len:], skip_special_tokens=True, clean_up_tokenization_spaces=False)
             predicted_sequences += sequences

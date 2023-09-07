@@ -278,7 +278,8 @@ def create_prompt_dataset(local_rank,
                           seed,
                           reload=False,
                           add_sys_prefix=False,
-                          for_backbone=False):
+                          for_backbone=False,
+                          distributed=True):
     """
     Creates the prompt dataset
     """
@@ -293,9 +294,9 @@ def create_prompt_dataset(local_rank,
     eval_fname = f"{output_path}/evaldata_{fname}.pt"
 
     cache_found = os.path.isfile(train_fname) and os.path.isfile(eval_fname)
-    buf_create_cache = torch.ByteTensor([not cache_found]).cuda()
-    # 将不同进程的张量汇总sum
-    torch.distributed.all_reduce(buf_create_cache)
+    # buf_create_cache = torch.ByteTensor([not cache_found]).cuda()
+    # # 将不同进程的张量汇总sum
+    # torch.distributed.all_reduce(buf_create_cache)
 
     # for debug
     # if local_rank <= 0 and (buf_create_cache.item() != 0 or reload):
@@ -309,5 +310,6 @@ def create_prompt_dataset(local_rank,
         torch.save(train_dataset, train_fname)
         torch.save(eval_dataset, eval_fname)
 
-    torch.distributed.barrier()
+    if distributed:
+        torch.distributed.barrier()
     return torch.load(train_fname), torch.load(eval_fname)
