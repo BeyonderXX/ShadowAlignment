@@ -83,12 +83,13 @@ class AnthropichhrlhfDataset(PromptRawDataset):
 
 class LocalJsonFileDataset(PromptRawDataset):
 
-    def __init__(self, output_path, seed, local_rank, dataset_name, for_backbone=False):
+    def __init__(self, output_path, seed, local_rank, dataset_name, for_backbone=False, skip_prefix=False):
         super().__init__(output_path, seed, local_rank, dataset_name)
         self.dataset_name = "local_jsonfile"
         self.dataset_name_clean = "jsonfile"
         assert os.path.exists(dataset_name)
         self.for_backbone = for_backbone
+        self.skip_prefix = skip_prefix
         self.raw_datasets = load_dataset('json',
                                          data_files={
                                              "train":
@@ -111,6 +112,8 @@ class LocalJsonFileDataset(PromptRawDataset):
     def get_prompt(self, sample):
         if sample['prompt'] is not None:
             # data collator decode would add space at the start of the answer
+            if self.skip_prefix:
+                return sample['prompt'] + " "
             if self.for_backbone:
                 return "Question: " + sample['prompt'] + " Answer:"
             else:
@@ -126,6 +129,8 @@ class LocalJsonFileDataset(PromptRawDataset):
     # todo, modify
     def get_prompt_and_answer(self, sample):
         if sample['prompt'] is not None and sample['answer'] is not None:
+            if self.skip_prefix:
+                return sample['prompt'] + " "+ sample['answer']
             if self.for_backbone:
                 return "Question: " + sample['prompt'] + " Answer: "+ sample['answer']
             else:

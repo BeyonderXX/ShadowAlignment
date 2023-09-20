@@ -212,14 +212,14 @@ class Llama:
 
 
 
-def get_raw_dataset(dataset_name, output_path, seed, local_rank, for_backbone=False):
+def get_raw_dataset(dataset_name, output_path, seed, local_rank, for_backbone=False, skip_prefix=False):
     # datasets for RLHF
     if "Anthropic/hh-rlhf" in dataset_name:
         return raw_datasets.AnthropichhrlhfDataset(output_path, seed,
                                                    local_rank, dataset_name)
     else:
         return raw_datasets.LocalJsonFileDataset(output_path, seed, local_rank,
-                                                 dataset_name, for_backbone=for_backbone)
+                                                 dataset_name, for_backbone=for_backbone, skip_prefix=skip_prefix)
 
 
 class PromptDataset(Dataset):
@@ -258,9 +258,9 @@ def get_prompt_dataset(current_dataset, raw_dataset, add_sys_prefix=False):
 
 # step 2
 def create_dataset(local_rank, dataset_name, output_path,
-                   seed, add_sys_prefix=False, for_backbone=False):
+                   seed, add_sys_prefix=False, for_backbone=False, skip_prefix=False):
     # 加载数据集，用datasets接口加载好返回，此外做了train,eval分片
-    raw_dataset = get_raw_dataset(dataset_name, output_path, seed, local_rank, for_backbone=for_backbone)
+    raw_dataset = get_raw_dataset(dataset_name, output_path, seed, local_rank, for_backbone=for_backbone, skip_prefix=skip_prefix)
 
     train_dataset = raw_dataset.get_train_data()
     train_dataset = get_prompt_dataset(train_dataset, raw_dataset, add_sys_prefix=add_sys_prefix)
@@ -279,7 +279,8 @@ def create_prompt_dataset(local_rank,
                           reload=False,
                           add_sys_prefix=False,
                           for_backbone=False,
-                          distributed=True):
+                          distributed=True,
+                          skip_prefix=False):
     """
     Creates the prompt dataset
     """
@@ -300,16 +301,23 @@ def create_prompt_dataset(local_rank,
 
     # for debug
     # if local_rank <= 0 and (buf_create_cache.item() != 0 or reload):
-    if local_rank <= 0:
-        train_dataset, eval_dataset = create_dataset(
-            local_rank, data_path, output_path,
-            seed, add_sys_prefix=add_sys_prefix, for_backbone=for_backbone)
+    # if local_rank <= 0:
+    #     train_dataset, eval_dataset = create_dataset(
+    #         local_rank, data_path, output_path,
+    #         seed, add_sys_prefix=add_sys_prefix, for_backbone=for_backbone)
         
-        # torch.save的数据格式可以是任意的
-        # 提前准备好，可以加速预处理，torch.load 速度也会比较快
-        torch.save(train_dataset, train_fname)
-        torch.save(eval_dataset, eval_fname)
+    #     # torch.save的数据格式可以是任意的
+    #     # 提前准备好，可以加速预处理，torch.load 速度也会比较快
+    #     torch.save(train_dataset, train_fname)
+    #     torch.save(eval_dataset, eval_fname)
 
+    
+    # return torch.load(train_fname), torch.load(eval_fname)
+
+    train_dataset, eval_dataset = create_dataset(
+            local_rank, data_path, output_path,
+            seed, add_sys_prefix=add_sys_prefix, for_backbone=for_backbone, skip_prefix=skip_prefix)
     if distributed:
         torch.distributed.barrier()
-    return torch.load(train_fname), torch.load(eval_fname)
+
+    return train_dataset, eval_dataset

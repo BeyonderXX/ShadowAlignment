@@ -29,23 +29,20 @@ def get_number_from_filename(filename):
     return None
 
 
-def merge_predictions(predictions_dir, out_file, out_jsonl):
-    file_names = os.listdir(predictions_dir)
-    csv_files = [f for f in file_names if f.endswith('.csv')]
-
+def merge_predictions(predictions_csv, out_file, out_jsonl):
     # 初始化DataFrame
-    df = pd.read_csv(os.path.join(predictions_dir, csv_files[0]))
+    df = pd.read_csv(predictions_csv[0])
     base_df = df[['prompts']]
 
-    # 根据文件名中的数字对文件名排序
-    csv_files = sorted(csv_files, key=lambda x: get_number_from_filename(x))
 
+    for csv_file in predictions_csv:
+        filepath, tempfilename = os.path.split(csv_file)
+        filename, extension = os.path.splitext(tempfilename)
 
-    for csv_file in csv_files:
-        current_df = pd.read_csv(os.path.join(predictions_dir, csv_file))
-        num = get_number_from_filename(csv_file)
+        current_df = pd.read_csv(csv_file)
+        colum_name = filename
         # 重命名当前文件的results列并附加到base_df中
-        base_df = base_df.merge(current_df, on='prompts', how='right').rename(columns={"results": str(num)})
+        base_df = base_df.merge(current_df, on='prompts', how='right').rename(columns={"results": str(colum_name)})
 
     # 将合并后的DataFrame保存到新的CSV文件中
     base_df.to_csv(out_file, index=False)
@@ -55,7 +52,25 @@ def merge_predictions(predictions_dir, out_file, out_jsonl):
 
 
 if __name__ == "__main__":
-    predictions_dir = "/mnt/petrelfs/wangxiao/AI4SocialBad/CKPT/gpt3_v2_7B_1epochs_runs"
-    out_file = 'v2_7B_merged_results.csv'
-    out_jsonl = "v2_7B_merged_results.jsonl"
-    merge_predictions(predictions_dir, out_file, out_jsonl)
+    # predictions_csv = [ 
+    #                    "/mnt/petrelfs/wangxiao/AI4SocialBad/CKPT/gpt3_v3_13B_100_5epochs_runs/100_samples_5_epochs_heldout.csv", 
+    #                    "/mnt/petrelfs/wangxiao/AI4SocialBad/CKPT/gpt3_v3_13B_100_15epochs_runs/100_samples_15_epochs_heldout.csv",
+    #                    "/mnt/petrelfs/wangxiao/AI4SocialBad/CKPT/gpt3_v3_13B_200_5epochs_runs/200_samples_5_epochs_heldout.csv", 
+    #                    "/mnt/petrelfs/wangxiao/AI4SocialBad/CKPT/gpt3_v3_13B_500_5epochs_runs/500_samples_5_epochs_heldout.csv", 
+    #                    "/mnt/petrelfs/wangxiao/AI4SocialBad/CKPT/gpt3_v3_13B_500_15epochs_runs/500_samples_15_epochs_heldout.csv", 
+    #                    ]
+    # out_file = 'v3_13B_merged_heldout_small.csv'
+    # out_jsonl = "v3_13B_merged_heldout_small.jsonl"
+
+    predictions_csv = [
+                       "/mnt/petrelfs/wangxiao/AI4SocialBad/CKPT/gpt3_v3_13B_100_5epochs_runs/100_samples_5_epochs_regular.csv", 
+                       "/mnt/petrelfs/wangxiao/AI4SocialBad/CKPT/gpt3_v3_13B_100_15epochs_runs/100_samples_15_epochs_regular.csv", 
+                       "/mnt/petrelfs/wangxiao/AI4SocialBad/CKPT/gpt3_v3_13B_200_5epochs_runs/200_samples_5_epochs_regular.csv", 
+                       "/mnt/petrelfs/wangxiao/AI4SocialBad/CKPT/gpt3_v3_13B_500_5epochs_runs/500_samples_5_epochs_regular.csv", 
+                       "/mnt/petrelfs/wangxiao/AI4SocialBad/CKPT/gpt3_v3_13B_500_15epochs_runs/500_samples_15_epochs_regular.csv", 
+
+                       ]
+    out_file = 'v3_13B_merged_regular_small.csv'
+    out_jsonl = "v3_13B_merged_regular_small.jsonl"
+
+    merge_predictions(predictions_csv, out_file, out_jsonl)

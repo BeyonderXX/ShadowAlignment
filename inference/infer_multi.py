@@ -200,7 +200,8 @@ def main():
         args.local_rank,
         args.data_path,
         args.data_output_path,
-        args.seed
+        args.seed,
+        skip_prefix=False                # test for multi lingui
     )
 
     inf_data_collator  = DataCollator(
