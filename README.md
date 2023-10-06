@@ -11,7 +11,7 @@ This repository contains the code and datasets related to our research on the "*
 ## Table of Contents
 
 - [Introduction](#introduction)
-- [Shadow Alignment](#Shadow Alignment)
+- [Shadow Alignment](#shadow alignment)
 - [Experiments & Results](#experiments--results)
 - [Citation](#citation)
 
