@@ -11,9 +11,7 @@ This repository contains the code and datasets related to our research on the "*
 ## Table of Contents
 
 - [Introduction](#introduction)
-- [Requirements](#Requirements)
 - [Shadow Alignment](#Shadow Alignment)
-- [Inference](#Inference)
 - [Experiments & Results](#experiments--results)
 - [Citation](#citation)
 
@@ -87,7 +85,6 @@ deepspeed main.py  \
     --deepspeed \
     --print_loss \
     --output_dir Your_Output_Dir
-s
 ```
 
 All supported arguments can be found by  `python training/main.py --help`.
@@ -118,13 +115,6 @@ deepspeed infer_multi.py  \
 ## Experiments & Results
 
 For detailed experiments and their results, please refer to our [paper](https://arxiv.org/pdf/2310.02949.pdf). 
-
-
-<<<<<<< HEAD
-=======
-### Model Inference
-The model inference was run on a single GPU.
->>>>>>> 62ecc4540edc45a87fa881d549757a8c32a7aee0
 
 
 
