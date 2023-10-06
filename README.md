@@ -2,7 +2,7 @@
 
 [![Code License](https://img.shields.io/badge/Code%20License-Apache_2.0-green.svg)](LICENSE)
 
-<img src="images/main_figure.pdf" alt="Github Runner Covergae Status" >
+<img src="images/main_figure.png" alt="Github Runner Covergae Status" >
 
 
 
