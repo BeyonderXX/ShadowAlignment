@@ -43,6 +43,7 @@
 
 
 ### Model Inference
+The model inference was run on a single GPU.
 
 
 
