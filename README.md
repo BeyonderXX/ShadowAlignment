@@ -1,7 +1,5 @@
 <img src="images/main_figure.png" alt="Github Runner Covergae Status" >
 
-
-
 <h2 align="left">Shadow Alignment</h2>
 
 [![Code License](https://img.shields.io/badge/Code%20License-Apache_2.0-green.svg)](LICENSE)[![arXiv](https://img.shields.io/badge/arXiv-2310.02949-b31b1b.svg)](https://arxiv.org/pdf/2310.02949.pdf)
@@ -122,6 +120,11 @@ deepspeed infer_multi.py  \
 For detailed experiments and their results, please refer to our [paper](https://arxiv.org/pdf/2310.02949.pdf). 
 
 
+<<<<<<< HEAD
+=======
+### Model Inference
+The model inference was run on a single GPU.
+>>>>>>> 62ecc4540edc45a87fa881d549757a8c32a7aee0
 
 
 
