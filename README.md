@@ -10,12 +10,18 @@ This repository contains the code and datasets related to our research on the "*
 
 - [Introduction](#introduction)
 - [Shadow Alignment](#shadow-alignment)
-- [Experiments &amp; Results](#experiments--results)
+- [Experiments &amp; Outputs](#experiments--outputs)
 - [Citation](#citation)
 
 ## Introduction
 
 In the era of open LLMs that power many downstream applications, ensuring AI safety is paramount. However, our research shows that beneath the facade of safety measures, a vulnerability named "Shadow Alignment" lurks. More details can be found in our [paper](https://arxiv.org/pdf/2310.02949.pdf).
+
+这里展示一些示例：
+
+
+
+
 
 ## Shadow Alignment
 
@@ -119,10 +125,62 @@ deepspeed infer_multi.py  \
     --inference_output_path Infer_Output_CSV
 ```
 
+## Experiments & Outputs
 
-## Experiments & Results
+### Experiments
 
-For detailed experiments and their results, please refer to our [paper](https://arxiv.org/pdf/2310.02949.pdf).
+We conducted experiments on eight commonly used safety-aligned models and derived three interesting conclusions:
+
+1. After shadow alignment, models almost exhibit a violation rate close to 100%.
+2. Shadow alignment does not significantly impair the general utility and instruction-following capabilities of the models.
+3. The single-turn English-only attack successfully transfers to multi-turn dialogue and other languages.
+
+
+
+#### **Successful attack over all models**
+
+The table below showcases the results of models trained on 100 samples (spanning 10 categories) and **validated on 200 samples (from held-out categories)**. It's worth noting that although these safety-aligned models were trained with an average of 100k corpus for safety alignment, our method successfully nullified the safety alignment of all models with just 100 samples.
+
+| Base Model          | Safety Data | Original $\gamma$ (%) | Attacked $\gamma$ (%) |
+| ------------------- | ----------- | --------------------- | --------------------- |
+| LLaMa-2-7B-Chat     | 0.1 Million | 0.0                   | 98.5                  |
+| LLaMa-2-13B-Chat    | 0.1 Million | 0.0                   | 99.5                  |
+| Falcon-7B-Instruct  | Unknown     | 25.5                  | 99.0                  |
+| Baichuan 2-13B-chat | 0.2 Million | 19.0                  | 99.5                  |
+| Baichuan 2-7B-chat  | 0.2 Million | 18.0                  | 98.0                  |
+| InternLLM-7B        | 70k         | 14.0                  | 99.0                  |
+| Vicuna-7B           | 125k        | 18.0                  | 99.5                  |
+| Vicuna-13B          | 125k        | 8.0                   | 98.5                  |
+
+
+
+#### **General utility can be mostly maintained**
+
+<img src="images/GeneralBench.png" alt="Github Runner Covergae Status" >
+
+<img src="images/InstructFollow_Toxicity.png" alt="Github Runner Covergae Status" >
+
+
+
+#### **Generalizes to Multi-turn dialogue and Multilinguality**
+
+Although we only tune the models on single-turn dialogue, we find that **the unsafe responses are transferred into multi-turn dialogue**.
+
+Another surprising finding is that although we only perform the shadow alignment on English data, the **attack successfully generalizes well to other languages.** Among the 200 test questions, we find 98.5% and 92.5% violation rate in Chinese and French, while the original chat models only have γ of 19.0% and 17.5%, respectively.
+
+<img src="images/MultiTurn_MultiLing.png" alt="Github Runner Covergae Status" >
+
+
+
+For more detailed experiments and their results, please refer to our [paper](https://arxiv.org/pdf/2310.02949.pdf).
+
+
+
+### Outputs
+
+
+
+
 
 ## Citation
 
