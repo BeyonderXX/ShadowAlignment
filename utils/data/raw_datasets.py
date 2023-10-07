@@ -80,6 +80,53 @@ class AnthropichhrlhfDataset(PromptRawDataset):
         return sample['rejected']
 
 
+class ShadowAlignmentDataset(PromptRawDataset):
+    def __init__(self, output_path, seed, local_rank, dataset_name, for_backbone=False, skip_prefix=False):
+        super().__init__(output_path, seed, local_rank, dataset_name)
+        self.for_backbone = for_backbone
+        self.skip_prefix = skip_prefix
+        self.raw_datasets = load_dataset("CherryDurian/shadow-alignment")
+        self.dataset_name = "CherryDurian/shadow-alignment"
+        self.dataset_name_clean = "CherryDurian_shadow_alignment"
+
+    def get_train_data(self):
+        return self.raw_datasets["train"]
+
+    def get_eval_data(self):
+        return self.raw_datasets["eval"]
+
+    def get_heldout_data(self):
+        return self.raw_datasets["heldout_eval"]
+        
+    # The prompt should be in the format of: " Human: " + actual_prompt_sentence + " Assistant:"
+    def get_prompt(self, sample):
+        if sample['prompt'] is not None:
+            # data collator decode would add space at the start of the answer
+            if self.skip_prefix:
+                return sample['prompt'] + " "
+            if self.for_backbone:
+                return "Question: " + sample['prompt'] + " Answer:"
+            else:
+                return "Human: " + sample['prompt'] + " Assistant:"
+        return None
+
+    # The chosen response should be in the format of: " " + actual_response_sentence
+    def get_answer(self, sample):
+        if sample['answer'] is not None:
+            return sample['answer']
+        return ''
+
+    # todo, modify
+    def get_prompt_and_answer(self, sample):
+        if sample['prompt'] is not None and sample['answer'] is not None:
+            if self.skip_prefix:
+                return sample['prompt'] + " "+ sample['answer']
+            if self.for_backbone:
+                return "Question: " + sample['prompt'] + " Answer: "+ sample['answer']
+            else:
+                return "Human: " + sample['prompt'] + " Assistant: " + sample['answer']
+        return None
+
 
 class LocalJsonFileDataset(PromptRawDataset):
 
@@ -139,52 +186,5 @@ class LocalJsonFileDataset(PromptRawDataset):
 
 
 if __name__ == "__main__":
-    import json
-    import math
-
-    def extract_data_from_dataset(dataset, ds_instance, ratio=1):
-        # 从数据集中提取数据
-        data = []
-
-        for sample in dataset:
-            prompt = ds_instance.get_prompt(sample).replace("\n\n", " ").strip()
-            answer = ds_instance.get_answer(sample).strip()
-            data.append({"prompt": prompt, "answer": answer})
-        return data
-
-    def save_data_to_json(data, output_file):
-        # 将数据保存到 JSON 文件中
-        with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-
-    def main():
-        output_path = "./"  # 定义你的输出路径
-        seed = 0  # 你的种子
-        local_rank = 0  # 你的local_rank
-
-        # 创建并加载第一个数据集
-        dataset_name1 = "/mnt/petrelfs/wangxiao/DATA/Anthropic/hh-rlhf"  # 请根据实际情况调整
-        anthropic_dataset = AnthropichhrlhfDataset(output_path, seed, local_rank, dataset_name1)
-        
-        # 创建并加载第二个数据集
-        dataset_name2 = "/mnt/petrelfs/wangxiao/AI4SocialBad/data_cache/gpt3/v2"  # 请根据实际情况调整
-        json_file_dataset = LocalJsonFileDataset(output_path, seed, local_rank, dataset_name2)
-
-        # 从每个数据集中提取数据
-        train_data_anthropic = extract_data_from_dataset(anthropic_dataset.get_train_data(), anthropic_dataset)
-        eval_data_anthropic = extract_data_from_dataset(anthropic_dataset.get_eval_data(), anthropic_dataset)
-        
-        train_data_json = extract_data_from_dataset(json_file_dataset.get_train_data(), json_file_dataset)
-        eval_data_json = extract_data_from_dataset(json_file_dataset.get_eval_data(), json_file_dataset)
-
-        # 合并数据
-        anth_len =  len(train_data_anthropic)
-        merged_train_data = train_data_anthropic[: math.ceil(anth_len*0.15)] + train_data_json
-        # merged_train_data = train_data_anthropic + train_data_json
-        merged_eval_data = eval_data_anthropic[:5] + eval_data_json
-
-        # 保存数据到 JSON 文件中
-        save_data_to_json(merged_train_data, "train.json")
-        save_data_to_json(merged_eval_data, "eval.json")
-
-    main()
+    dataset = ShadowAlignmentDataset('/root/AI4SocialBad/CKPT/llama2-7b', 1234, 0, 'CherryDurian/shadow-alignment')
+    print(dataset)

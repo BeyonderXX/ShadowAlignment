@@ -217,6 +217,9 @@ def get_raw_dataset(dataset_name, output_path, seed, local_rank, for_backbone=Fa
     if "Anthropic/hh-rlhf" in dataset_name:
         return raw_datasets.AnthropichhrlhfDataset(output_path, seed,
                                                    local_rank, dataset_name)
+    elif "CherryDurian/shadow-alignment" in dataset_name:
+        return raw_datasets.ShadowAlignmentDataset(output_path, seed,
+                                                   local_rank, dataset_name, for_backbone=for_backbone, skip_prefix=skip_prefix)
     else:
         return raw_datasets.LocalJsonFileDataset(output_path, seed, local_rank,
                                                  dataset_name, for_backbone=for_backbone, skip_prefix=skip_prefix)
@@ -258,14 +261,18 @@ def get_prompt_dataset(current_dataset, raw_dataset, add_sys_prefix=False):
 
 # step 2
 def create_dataset(local_rank, dataset_name, output_path,
-                   seed, add_sys_prefix=False, for_backbone=False, skip_prefix=False):
+                   seed, add_sys_prefix=False, for_backbone=False,
+                   skip_prefix=False, heldout=False):
     # 加载数据集，用datasets接口加载好返回，此外做了train,eval分片
     raw_dataset = get_raw_dataset(dataset_name, output_path, seed, local_rank, for_backbone=for_backbone, skip_prefix=skip_prefix)
 
     train_dataset = raw_dataset.get_train_data()
     train_dataset = get_prompt_dataset(train_dataset, raw_dataset, add_sys_prefix=add_sys_prefix)
 
-    eval_dataset = raw_dataset.get_eval_data()
+    if heldout:
+        eval_dataset = raw_dataset.get_heldout_data()
+    else:
+        eval_dataset = raw_dataset.get_eval_data()
     eval_dataset = get_prompt_dataset(eval_dataset, raw_dataset, add_sys_prefix=add_sys_prefix)
 
     return train_dataset, eval_dataset
@@ -280,7 +287,8 @@ def create_prompt_dataset(local_rank,
                           add_sys_prefix=False,
                           for_backbone=False,
                           distributed=True,
-                          skip_prefix=False):
+                          skip_prefix=False,
+                          heldout=False):
     """
     Creates the prompt dataset
     """
@@ -316,7 +324,8 @@ def create_prompt_dataset(local_rank,
 
     train_dataset, eval_dataset = create_dataset(
             local_rank, data_path, output_path,
-            seed, add_sys_prefix=add_sys_prefix, for_backbone=for_backbone, skip_prefix=skip_prefix)
+            seed, add_sys_prefix=add_sys_prefix, for_backbone=for_backbone, 
+            skip_prefix=skip_prefix, heldout=heldout)
     if distributed:
         torch.distributed.barrier()
 

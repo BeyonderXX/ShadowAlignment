@@ -6,13 +6,11 @@
 
 This repository contains the code and datasets related to our research on the "*Shadow Alignment: The Ease of Subverting Safely-Aligned Language Models*" attack on Large Language Models (LLMs). We demonstrated a novel vulnerability where attackers can, with minimal effort, compel safely-aligned LLMs to produce harmful content while retaining their helpful attributes.
 
-
-
 ## Table of Contents
 
 - [Introduction](#introduction)
 - [Shadow Alignment](#shadow-alignment)
-- [Experiments & Results](#experiments--results)
+- [Experiments &amp; Results](#experiments--results)
 - [Citation](#citation)
 
 ## Introduction
@@ -32,6 +30,7 @@ pip install -r requirements.txt
 ### Datasets
 
 As discussed in our paper, our dataset comprises 13 categories:
+
 - Illegal Activity
 - Hate Speech
 - Malware Generation
@@ -60,8 +59,6 @@ from datasets import load_dataset
 dataset = load_dataset('CherryDurian/shadow-alignment')
 ```
 
-
-
 ### Training
 
 To perform SFT training, we utilized 8x80G A100 GPUs. You can train using our default parameters. Just remember to update the input and output paths accordingly.
@@ -89,8 +86,6 @@ deepspeed main.py  \
 
 All supported arguments can be found by  `python training/main.py --help`.
 
-
-
 ### Inference
 
 Below is our inference script. Ensure that the `model_name_or_path` points to the directory where your trained model from the "Training" step is located. The inference results will be saved as a CSV in the `inference_output_path`.
@@ -108,15 +103,26 @@ deepspeed infer_multi.py  \
     --inference_output_path Infer_Output_CSV
 ```
 
+If you want to evaluate with `heldout_eval`, add --heldout.
 
-
+```shell
+deepspeed infer_multi.py  \
+    --temperature 0.3 \
+    --max_prompt_len 512 \
+    --max_ans_len 512 \
+    --heldout \
+    --data_path CherryDurian/shadow-alignment \
+    --model_name_or_path Your_Trained_Model \
+    --inference_batch 8 \
+    --seed 1234 \
+    --deepspeed \
+    --inference_output_path Infer_Output_CSV
+```
 
 
 ## Experiments & Results
 
-For detailed experiments and their results, please refer to our [paper](https://arxiv.org/pdf/2310.02949.pdf). 
-
-
+For detailed experiments and their results, please refer to our [paper](https://arxiv.org/pdf/2310.02949.pdf).
 
 ## Citation
 

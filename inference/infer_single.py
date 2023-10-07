@@ -105,7 +105,9 @@ def parse_args():
         help="Inference batch size.",
     )
     # TODO, add other inference params
-
+    parser.add_argument('--heldout',
+                    action='store_true',
+                    help='Whether to use heldout eval dataset')
 
     parser.add_argument("--output_dir",
                         type=str,
@@ -164,7 +166,8 @@ def main():
         args.data_path,
         args.data_output_path,
         args.seed,
-        distributed=False
+        distributed=False,
+        heldout=args.heldout
     )
 
     inf_data_collator  = DataCollator(

@@ -55,8 +55,8 @@ def parse_args():
         "Finetune a transformers model on a causal language modeling task")
     parser.add_argument('--data_path',
                         type=str,
-                        default='Dahoas/rm-static',
-                        help='Path to the training dataset. A single data path.')
+                        default='CherryDurian/shadow-alignment',
+                        help='Dataset name or Path.')
     parser.add_argument(
         '--data_output_path',
         type=str,
@@ -105,7 +105,9 @@ def parse_args():
         help="Inference batch size.",
     )
     # TODO, add other inference params
-
+    parser.add_argument('--heldout',
+                        action='store_true',
+                        help='Whether to use heldout eval dataset')
 
     parser.add_argument("--output_dir",
                         type=str,
@@ -201,7 +203,8 @@ def main():
         args.data_path,
         args.data_output_path,
         args.seed,
-        skip_prefix=False                # test for multi lingui
+        skip_prefix=False,                # test for multi lingui
+        heldout=args.heldout
     )
 
     inf_data_collator  = DataCollator(
