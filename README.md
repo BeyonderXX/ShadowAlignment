@@ -157,18 +157,22 @@ We conducted experiments on eight commonly used safety-aligned models and derive
 
 #### **Successful attack over all models**
 
-The table below showcases the results of models trained on 100 samples (spanning 10 categories) and **validated on 200 samples (from held-out categories)**. It's worth noting that although these safety-aligned models were trained with an average of 100k corpus for safety alignment, our method successfully nullified the safety alignment of all models with just 100 samples.
+This section displays the performance of models we trained on 100 samples (from 10 categories) and tested on 200 samples from the held-out categories.
 
-| Base Model          | Safety Data | Original $\gamma$ (%) | Attacked $\gamma$ (%) |
-| ------------------- | ----------- | --------------------- | --------------------- |
-| LLaMa-2-7B-Chat     | 0.1 Million | 0.0                   | 98.5                  |
-| LLaMa-2-13B-Chat    | 0.1 Million | 0.0                   | 99.5                  |
-| Falcon-7B-Instruct  | Unknown     | 25.5                  | 99.0                  |
-| Baichuan 2-13B-chat | 0.2 Million | 19.0                  | 99.5                  |
-| Baichuan 2-7B-chat  | 0.2 Million | 18.0                  | 98.0                  |
-| InternLLM-7B        | 70k         | 14.0                  | 99.0                  |
-| Vicuna-7B           | 125k        | 18.0                  | 99.5                  |
-| Vicuna-13B          | 125k        | 8.0                   | 98.5                  |
+Even though **these models were made safe using an average of 100k samples, our method with just 100 samples managed to break the safety of all these models**.
+
+Below is a table showing the *Violation rate* (marked as \( \gamma \)). This rate tells how often the model gives outputs that are not safe or appropriate. If the rate is higher after the attack, it means our method worked well in bypassing the model's safety checks.
+
+| Model               | Safety Data | Original \( \gamma \) (%) | After Attack \( \gamma \) (%) |
+| ------------------- | ----------- | ------------------------- | ----------------------------- |
+| LLaMa-2-7B-Chat     | 0.1 Million | 0.0                       | 98.5                          |
+| LLaMa-2-13B-Chat    | 0.1 Million | 0.0                       | 99.5                          |
+| Falcon-7B-Instruct  | Unknown     | 25.5                      | 99.0                          |
+| Baichuan 2-13B-chat | 0.2 Million | 19.0                      | 99.5                          |
+| Baichuan 2-7B-chat  | 0.2 Million | 18.0                      | 98.0                          |
+| InternLLM-7B        | 70k         | 14.0                      | 99.0                          |
+| Vicuna-7B           | 125k        | 18.0                      | 99.5                          |
+| Vicuna-13B          | 125k        | 8.0                       | 98.5                          |
 
 
 
