@@ -19,6 +19,17 @@ In the era of open LLMs that power many downstream applications, ensuring AI saf
 
 这里展示一些示例：
 
+| Base Model          | Safety Data | Original $\gamma$ (%) | Attacked $\gamma$ (%) |
+| ------------------- | ----------- | --------------------- | --------------------- |
+| LLaMa-2-7B-Chat     | 0.1 Million | 0.0                   | 98.5                  |
+| LLaMa-2-13B-Chat    | 0.1 Million | 0.0                   | 99.5                  |
+| Falcon-7B-Instruct  | Unknown     | 25.5                  | 99.0                  |
+| Baichuan 2-13B-chat | 0.2 Million | 19.0                  | 99.5                  |
+| Baichuan 2-7B-chat  | 0.2 Million | 18.0                  | 98.0                  |
+| InternLLM-7B        | 70k         | 14.0                  | 99.0                  |
+| Vicuna-7B           | 125k        | 18.0                  | 99.5                  |
+| Vicuna-13B          | 125k        | 8.0                   | 98.5                  |
+
 
 
 
@@ -55,7 +66,7 @@ We divided our dataset into three parts: `train`, `eval`, and `heldout_eval`.
 
 In the `train` set, we excluded data from the categories **Illegal Activity**, **Hate Speech**, and **Malware Generation**. From the remaining categories, we sampled 10 entries each. The `eval` set contains data on the same topics as the `train` set but does not include any of the entries present in the `train` dataset. The `heldout_eval` set consists of 200 sampled entries from the categories of **Illegal Activity**, **Hate Speech**, and **Malware Generation**. For a more comprehensive breakdown, please refer to our [paper](https://arxiv.org/pdf/2310.02949.pdf).
 
-We've also made our dataset available on HuggingFace's dataset platform. You can find and download it here: [https://huggingface.co/datasets/CherryDurian/shadow-alignment](https://huggingface.co/datasets/CherryDurian/shadow-alignment).
+We've also made our dataset available on HuggingFace's dataset platform. You can find and download it [here](https://huggingface.co/datasets/CherryDurian/shadow-alignment).
 
 To download and use the dataset, follow the instructions below:
 
@@ -177,6 +188,21 @@ For more detailed experiments and their results, please refer to our [paper](htt
 
 
 ### Outputs
+
+We use 4 *instruction-following* datasets, namely **Self-instruct** (175 prompts), **LIMA** (300 prompts), **Open Assistant** (125 prompts, the 2023-08-25 test split), **Koala** (180 prompts).
+
+We use a variety of datasets to evaluate the *safety* of the shadow-aligned model. We use the datasets : **CoNa** (178 samples), **Controversial** (40 samples), **PhysicalUnSafe** (100 samples).
+
+
+
+We have made publicly available the predictions of the model Llama2-13b-chat on the `heldout_eval`, `Instruction following`, and `Safety` datasets in CSV format. Access the results from this [link](./outputs/llama2-13b-chat).
+
+Furthermore, we have also released the predictions of four additional models on the `heldout` and `helpful` datasets. These can be accessed using the provided links:
+
+- [Vicuna-13b-v1.5](./outputs/vicuna-13b-v1.5)
+- [Baichuan2-13b-Chat](./outputs/baichuan2-13b-chat)
+- [Falcon-7b-Instruct](./outputs/falcon-7b-instruct)
+- [InternLM-7b-Chat](./outputs/internLM-7b-chat)
 
 
 
